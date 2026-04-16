@@ -1,0 +1,209 @@
+{
+  "default": {
+    "good_message": "Good form",
+    "rules": []
+  },
+  "squat": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_knee",
+        "op": "lt",
+        "value": 62,
+        "mistake_code": "too_deep",
+        "message": "Great effort. Come up slightly and keep your heels grounded.",
+        "severity": 2
+      },
+      {
+        "metric": "avg_knee",
+        "op": "gt",
+        "value": 128,
+        "mistake_code": "insufficient_depth",
+        "message": "Nice start. Go a little deeper for a complete squat.",
+        "severity": 2
+      },
+      {
+        "metric": ["left_knee", "right_knee"],
+        "op": "abs_diff_gt",
+        "value": 16,
+        "mistake_code": "knee_instability",
+        "message": "Keep both knees tracking evenly as you move.",
+        "severity": 1
+      }
+    ]
+  },
+  "barbell_squat": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_knee",
+        "op": "lt",
+        "value": 62,
+        "mistake_code": "too_deep",
+        "message": "Great effort. Come up slightly and keep your heels grounded.",
+        "severity": 2
+      },
+      {
+        "metric": "avg_knee",
+        "op": "gt",
+        "value": 128,
+        "mistake_code": "insufficient_depth",
+        "message": "Nice start. Go a little deeper for a complete squat.",
+        "severity": 2
+      },
+      {
+        "metric": ["left_knee", "right_knee"],
+        "op": "abs_diff_gt",
+        "value": 16,
+        "mistake_code": "knee_instability",
+        "message": "Keep both knees tracking evenly as you move.",
+        "severity": 1
+      }
+    ]
+  },
+  "bicep_curl": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_elbow",
+        "op": "gt",
+        "value": 142,
+        "mistake_code": "incomplete_contraction",
+        "message": "Nice rep. Lift a little higher and squeeze at the top.",
+        "severity": 2
+      },
+      {
+        "metric": "avg_elbow",
+        "op": "lt",
+        "value": 38,
+        "mistake_code": "overflexion",
+        "message": "Control the top and avoid over-squeezing.",
+        "severity": 1
+      },
+      {
+        "metric": ["left_elbow", "right_elbow"],
+        "op": "abs_diff_gt",
+        "value": 14,
+        "mistake_code": "elbow_instability",
+        "message": "Keep your elbows steady and close to your body.",
+        "severity": 1
+      }
+    ]
+  },
+  "barbell_curl": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_elbow",
+        "op": "gt",
+        "value": 142,
+        "mistake_code": "incomplete_contraction",
+        "message": "Nice rep. Lift a little higher and squeeze at the top.",
+        "severity": 2
+      },
+      {
+        "metric": "avg_elbow",
+        "op": "lt",
+        "value": 38,
+        "mistake_code": "overflexion",
+        "message": "Control the top and avoid over-squeezing.",
+        "severity": 1
+      },
+      {
+        "metric": ["left_elbow", "right_elbow"],
+        "op": "abs_diff_gt",
+        "value": 14,
+        "mistake_code": "elbow_instability",
+        "message": "Keep your elbows steady and close to your body.",
+        "severity": 1
+      }
+    ]
+  },
+  "pull_up": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_elbow",
+        "op": "gt",
+        "value": 125,
+        "mistake_code": "incomplete_contraction",
+        "message": "Strong pull. Finish by bringing your chest higher.",
+        "severity": 2
+      },
+      {
+        "metric": ["left_elbow", "right_elbow"],
+        "op": "abs_diff_gt",
+        "value": 14,
+        "mistake_code": "elbow_instability",
+        "message": "Keep the pull balanced on both arms.",
+        "severity": 1
+      }
+    ]
+  },
+  "lateral_raise": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_shoulder",
+        "op": "lt",
+        "value": 72,
+        "mistake_code": "insufficient_height",
+        "message": "Lift a little higher until your arms reach shoulder level.",
+        "severity": 2
+      },
+      {
+        "metric": "avg_shoulder",
+        "op": "gt",
+        "value": 108,
+        "mistake_code": "too_high",
+        "message": "Nice control. Stop around shoulder height to protect the joint.",
+        "severity": 1
+      },
+      {
+        "metric": ["left_shoulder", "right_shoulder"],
+        "op": "abs_diff_gt",
+        "value": 14,
+        "mistake_code": "arm_imbalance",
+        "message": "Raise both arms evenly and avoid twisting.",
+        "severity": 1
+      }
+    ]
+  },
+  "push_up": {
+    "good_message": "Good form",
+    "rules": [
+      {
+        "metric": "avg_elbow",
+        "op": "gt",
+        "value": 152,
+        "mistake_code": "insufficient_depth",
+        "message": "Lower your chest a bit more for full range.",
+        "severity": 2
+      },
+      {
+        "metric": "avg_elbow",
+        "op": "lt",
+        "value": 52,
+        "mistake_code": "too_deep",
+        "message": "Great control. Do not sink too low at the bottom.",
+        "severity": 1
+      },
+      {
+        "metric": "avg_hip",
+        "op": "lt",
+        "value": 150,
+        "mistake_code": "hip_sag",
+        "message": "Brace your core and keep your hips in line.",
+        "severity": 2
+      },
+      {
+        "metric": ["left_elbow", "right_elbow"],
+        "op": "abs_diff_gt",
+        "value": 15,
+        "mistake_code": "elbow_instability",
+        "message": "Press evenly with both arms.",
+        "severity": 1
+      }
+    ]
+  }
+}
