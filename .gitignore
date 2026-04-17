@@ -25,4 +25,4 @@ reports
 
 dashboard
 ai-trainer/
-ipynb_checkpoints/
+.ipynb_checkpoints/
