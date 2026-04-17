@@ -1,0 +1,252 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 225 25% 6%;
+    --foreground: 0 0% 96%;
+
+    --card: 225 20% 9%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 225 20% 9%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 199 89% 48%;
+    --primary-foreground: 225 25% 6%;
+
+    --secondary: 225 16% 14%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 225 14% 12%;
+    --muted-foreground: 225 10% 50%;
+
+    --accent: 16 85% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 225 14% 15%;
+    --input: 225 14% 15%;
+    --ring: 199 89% 48%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 225 20% 9%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 16% 14%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 225 14% 15%;
+    --sidebar-ring: 199 89% 48%;
+
+    --font-heading: 'Bebas Neue', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'Space Grotesk', sans-serif;
+
+    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%), hsl(210 90% 60%));
+    --gradient-accent: linear-gradient(135deg, hsl(16 85% 55%), hsl(35 95% 55%));
+    --gradient-dark: linear-gradient(180deg, hsl(225 25% 6%), hsl(225 25% 3%));
+    --gradient-glass: linear-gradient(135deg, hsl(225 20% 12% / 0.8), hsl(225 20% 8% / 0.6));
+    --shadow-glow: 0 0 40px hsl(199 89% 48% / 0.12);
+    --shadow-glow-strong: 0 0 60px hsl(199 89% 48% / 0.25), 0 0 120px hsl(199 89% 48% / 0.08);
+    --shadow-card: 0 8px 32px hsl(0 0% 0% / 0.5);
+    --shadow-card-hover: 0 16px 48px hsl(0 0% 0% / 0.6), 0 0 40px hsl(199 89% 48% / 0.1);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: 0.03em;
+  }
+
+  ::selection {
+    background: hsl(199 89% 48% / 0.3);
+    color: hsl(0 0% 100%);
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply rounded-2xl border border-border/40;
+    background: var(--gradient-glass);
+    backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow: var(--shadow-card);
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .glass-card:hover {
+    box-shadow: var(--shadow-card-hover);
+    border-color: hsl(199 89% 48% / 0.2);
+  }
+
+  .glass-card-static {
+    @apply rounded-2xl border border-border/40;
+    background: var(--gradient-glass);
+    backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow: var(--shadow-card);
+  }
+
+  .glow-border {
+    box-shadow: var(--shadow-glow-strong), inset 0 1px 0 hsl(0 0% 100% / 0.06);
+    border-color: hsl(199 89% 48% / 0.3);
+  }
+
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-accent {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hover-lift {
+    @apply transition-all;
+    transition-duration: 0.4s;
+    transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-8px) scale(1.01);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .btn-primary {
+    @apply relative overflow-hidden px-8 py-3.5 rounded-xl font-semibold text-sm transition-all duration-300;
+    background: var(--gradient-primary);
+    color: hsl(225 25% 6%);
+    box-shadow: 0 4px 20px hsl(199 89% 48% / 0.3);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 6px 30px hsl(199 89% 48% / 0.5);
+    transform: translateY(-2px);
+  }
+
+  .btn-outline {
+    @apply px-8 py-3.5 rounded-xl font-semibold text-sm border transition-all duration-300;
+    border-color: hsl(0 0% 100% / 0.15);
+    color: hsl(0 0% 96%);
+    backdrop-filter: blur(10px);
+  }
+
+  .btn-outline:hover {
+    border-color: hsl(199 89% 48% / 0.5);
+    background: hsl(199 89% 48% / 0.08);
+    box-shadow: 0 0 20px hsl(199 89% 48% / 0.1);
+  }
+
+  .stat-badge {
+    @apply px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5;
+    background: hsl(199 89% 48% / 0.1);
+    color: hsl(199 89% 48%);
+    border: 1px solid hsl(199 89% 48% / 0.15);
+  }
+
+  .accent-badge {
+    @apply px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5;
+    background: hsl(16 85% 55% / 0.1);
+    color: hsl(16 85% 55%);
+    border: 1px solid hsl(16 85% 55% / 0.15);
+  }
+
+  .exercise-number {
+    @apply flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-heading text-xl;
+    background: linear-gradient(135deg, hsl(199 89% 48% / 0.15), hsl(199 89% 48% / 0.05));
+    color: hsl(199 89% 48%);
+    border: 1px solid hsl(199 89% 48% / 0.15);
+  }
+
+  .progress-line {
+    @apply absolute left-10 top-16 w-px;
+    height: calc(100% - 4rem);
+    background: linear-gradient(180deg, hsl(199 89% 48% / 0.3), transparent);
+  }
+
+  .nav-glass {
+    @apply fixed top-0 left-0 right-0 z-50;
+    background: hsl(225 25% 6% / 0.7);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border-bottom: 1px solid hsl(0 0% 100% / 0.05);
+  }
+
+  .hero-overlay {
+    background: linear-gradient(
+      180deg,
+      hsl(225 25% 6% / 0.5) 0%,
+      hsl(225 25% 6% / 0.3) 30%,
+      hsl(225 25% 6% / 0.6) 70%,
+      hsl(225 25% 6%) 100%
+    );
+  }
+
+  .section-overlay {
+    background: linear-gradient(
+      180deg,
+      hsl(225 25% 6% / 0.7) 0%,
+      hsl(225 25% 6% / 0.4) 40%,
+      hsl(225 25% 6% / 0.85) 100%
+    );
+  }
+
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.04), transparent);
+    animation: shimmer 3s infinite;
+  }
+
+  @keyframes shimmer {
+    100% { left: 200%; }
+  }
+
+  .floating {
+    animation: floating 6s ease-in-out infinite;
+  }
+
+  @keyframes floating {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .pulse-glow {
+    animation: pulseGlow 3s ease-in-out infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 20px hsl(199 89% 48% / 0.1); }
+    50% { box-shadow: 0 0 40px hsl(199 89% 48% / 0.25); }
+  }
+}
