@@ -312,7 +312,7 @@ const Camera = () => {
         </button>
         <div className="text-center">
           <p className="text-[10px] font-mono text-primary uppercase tracking-[0.35em]">
-            Green FormFix Lens
+            Workout Lens
           </p>
           <h2 className="font-heading text-2xl uppercase leading-none">{targetExerciseName}</h2>
         </div>

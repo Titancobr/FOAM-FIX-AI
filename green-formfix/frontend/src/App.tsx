@@ -15,6 +15,7 @@ import Recipes from "./pages/Recipes";
 import ScanMeal from "./pages/ScanMeal";
 import NotFound from "./pages/NotFound";
 import Camera from "./pages/Camera";
+import UserProfile from "./pages/UserProfile";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,8 @@ const App = () => (
           
           {/* AR Lens View */}
           <Route path="/camera" element={<Camera />} />
+
+          <Route path="/profile" element={<UserProfile />} />
           
           <Route path="/quiz" element={<Quiz />} />
           <Route path="/recipes" element={<Recipes />} />

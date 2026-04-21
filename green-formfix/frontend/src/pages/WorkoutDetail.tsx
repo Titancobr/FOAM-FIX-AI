@@ -27,7 +27,7 @@ const WorkoutDetail = () => {
             key={day.id} 
             day={day} 
             index={i} 
-            // Change this from /camera to /workout
+            // Change this from /camera to /workout : done
             onClick={() => navigate(`/workout/${planId}/${day.id}`)} 
           />
         ))}

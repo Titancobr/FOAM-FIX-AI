@@ -29,13 +29,12 @@ const Register = () => {
     setIsLoading(true);
     
     try {
-      // ✅ Sending only email and password to match your FastAPI UserSchema
       const response = await axios.post("http://127.0.0.1:8000/register", {
         email: email,
         password: password,
       });
 
-      toast({ title: "Account created! 🎉 Please log in." });
+      toast({ title: "Account created! Please log in." });
       navigate("/login");
     } catch (error: any) {
       toast({ 
