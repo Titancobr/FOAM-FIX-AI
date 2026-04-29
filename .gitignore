@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+lib/
+
+# Mac
+.DS_Store
+
+# ML / large files
+*.h5
+*.pt
+*.pth
+*.pb
+
+#others
+notebooks
+dataset 
+docs
+data.csv
+reports
+
+dashboard
+ai-trainer/
+.ipynb_checkpoints/
