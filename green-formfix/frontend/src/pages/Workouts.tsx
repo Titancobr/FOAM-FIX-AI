@@ -1,7 +1,7 @@
 // src/pages/Workouts.tsx
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame } from "lucide-react";
+import { ArrowRight, Flame, Sparkles } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 import PlanCard from "@/components/workouts/PlanCard";
@@ -18,7 +18,7 @@ const Workouts = () => {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative h-[40vh] flex items-center justify-center overflow-hidden px-4">
+      <section className="relative flex h-[46vh] items-center justify-center overflow-hidden px-4">
         <div
           className="absolute inset-0 z-0 bg-no-repeat bg-cover bg-center"
           style={{ backgroundImage: `url(${heroFitness})` }}
@@ -35,10 +35,52 @@ const Workouts = () => {
           <h1 className="text-6xl md:text-8xl font-heading text-white uppercase drop-shadow-2xl">
             Workout <span className="text-gradient">Plans</span>
           </h1>
+          <motion.p
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="mx-auto mt-4 max-w-2xl text-sm text-white/85 md:text-base"
+          >
+            Pick a split, stay on pace, and move into the camera flow with less friction.
+          </motion.p>
         </div>
       </section>
 
-      {/* Grid */}
+      <div className="-mt-12 mx-auto mb-8 grid max-w-7xl gap-4 px-6 md:grid-cols-3">
+        {[
+          { title: "Structured splits", copy: "Push, pull, legs and high-volume options ready to go." },
+          { title: "Live tracking", copy: "Jump from plan view to real-time rep counting and form support." },
+          { title: "Adaptive flow", copy: "Pair your workout day with meal tracking inside the same routine." },
+        ].map((item, index) => (
+          <motion.div
+            key={item.title}
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.08 }}
+            className="glass-card p-5"
+          >
+            <div className="mb-3 flex items-center gap-2 text-primary">
+              <Sparkles className="h-4 w-4" />
+              <p className="text-[10px] uppercase tracking-[0.28em]">Focus</p>
+            </div>
+            <h3 className="text-2xl text-foreground">{item.title}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">{item.copy}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mx-auto mb-6 flex max-w-7xl items-center justify-between px-6">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.28em] text-primary/70">Choose your route</p>
+          <h2 className="mt-1 text-3xl text-foreground">Plans built for consistency</h2>
+        </div>
+        <button onClick={() => navigate("/quiz")} className="btn-outline hidden items-center gap-2 md:inline-flex">
+          Try Custom AI
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {allPlans.map((plan, i) => (
           <PlanCard

@@ -7,8 +7,10 @@ import {
   Camera,
   Droplets,
   Flame,
+  HeartPulse,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
   Wheat,
 } from "lucide-react";
@@ -29,8 +31,13 @@ type NutritionProfile = {
   sex: string;
   height_cm: number | null;
   weight_kg: number | null;
+  target_weight_kg: number | null;
+  body_fat_percent: number | null;
   activity_level: string;
   goal_type: string;
+  dietary_preference: string;
+  meals_per_day: number;
+  allergies: string;
   target_calories: number;
   target_protein: number;
   target_carbs: number;
@@ -134,8 +141,13 @@ const Recipes = () => {
     sex: "male",
     height_cm: "",
     weight_kg: "",
+    target_weight_kg: "",
+    body_fat_percent: "",
     activity_level: "moderate",
     goal_type: "maintain",
+    dietary_preference: "balanced",
+    meals_per_day: "3",
+    allergies: "",
   });
 
   const loadAll = async () => {
@@ -158,8 +170,13 @@ const Recipes = () => {
         sex: profileJson.sex || "male",
         height_cm: profileJson.height_cm ? String(profileJson.height_cm) : "",
         weight_kg: profileJson.weight_kg ? String(profileJson.weight_kg) : "",
+        target_weight_kg: profileJson.target_weight_kg ? String(profileJson.target_weight_kg) : "",
+        body_fat_percent: profileJson.body_fat_percent ? String(profileJson.body_fat_percent) : "",
         activity_level: profileJson.activity_level || "moderate",
         goal_type: profileJson.goal_type || "maintain",
+        dietary_preference: profileJson.dietary_preference || "balanced",
+        meals_per_day: profileJson.meals_per_day ? String(profileJson.meals_per_day) : "3",
+        allergies: profileJson.allergies || "",
       });
     } catch {
       toast({ title: "Could not load meal data", variant: "destructive" });
@@ -202,8 +219,13 @@ const Recipes = () => {
           sex: profileForm.sex,
           height_cm: profileForm.height_cm ? Number(profileForm.height_cm) : null,
           weight_kg: profileForm.weight_kg ? Number(profileForm.weight_kg) : null,
+          target_weight_kg: profileForm.target_weight_kg ? Number(profileForm.target_weight_kg) : null,
+          body_fat_percent: profileForm.body_fat_percent ? Number(profileForm.body_fat_percent) : null,
           activity_level: profileForm.activity_level,
           goal_type: profileForm.goal_type,
+          dietary_preference: profileForm.dietary_preference,
+          meals_per_day: Number(profileForm.meals_per_day) || 3,
+          allergies: profileForm.allergies,
         }),
       });
       const data = await response.json();
@@ -508,6 +530,37 @@ const Recipes = () => {
                 </div>
               ))}
             </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {[
+                {
+                  icon: HeartPulse,
+                  title: "Body profile",
+                  copy: profile?.height_cm && profile?.weight_kg ? "Targets are tuned from your saved body stats." : "Add your body stats to make calorie targets smarter.",
+                },
+                {
+                  icon: Sparkles,
+                  title: "Smart suggestion",
+                  copy: "Meal ideas shift with your remaining calories and macro room.",
+                },
+                {
+                  icon: Camera,
+                  title: "Phone scan",
+                  copy: "Use food photos plus packaging hints for tighter calorie estimates.",
+                },
+              ].map((item) => (
+                <motion.div
+                  key={item.title}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className="rounded-2xl border border-white/10 bg-black/15 p-4"
+                >
+                  <item.icon className="h-4 w-4 text-primary" />
+                  <p className="mt-3 text-lg font-semibold text-foreground">{item.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.copy}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-card/80 p-5 backdrop-blur-xl">
@@ -517,6 +570,9 @@ const Recipes = () => {
               <Input placeholder="Age" value={profileForm.age} onChange={(e) => setProfileForm((c) => ({ ...c, age: e.target.value }))} className="bg-secondary border-border" />
               <Input placeholder="Weight (kg)" value={profileForm.weight_kg} onChange={(e) => setProfileForm((c) => ({ ...c, weight_kg: e.target.value }))} className="bg-secondary border-border" />
               <Input placeholder="Height (cm)" value={profileForm.height_cm} onChange={(e) => setProfileForm((c) => ({ ...c, height_cm: e.target.value }))} className="bg-secondary border-border" />
+              <Input placeholder="Target weight (kg)" value={profileForm.target_weight_kg} onChange={(e) => setProfileForm((c) => ({ ...c, target_weight_kg: e.target.value }))} className="bg-secondary border-border" />
+              <Input placeholder="Body fat % (optional)" value={profileForm.body_fat_percent} onChange={(e) => setProfileForm((c) => ({ ...c, body_fat_percent: e.target.value }))} className="bg-secondary border-border" />
+              <Input placeholder="Meals per day" value={profileForm.meals_per_day} onChange={(e) => setProfileForm((c) => ({ ...c, meals_per_day: e.target.value }))} className="bg-secondary border-border" />
               <select value={profileForm.sex} onChange={(e) => setProfileForm((c) => ({ ...c, sex: e.target.value }))} className="rounded-md border border-border bg-secondary px-3 py-2 text-foreground">
                 <option value="male">Male</option>
                 <option value="female">Female</option>
@@ -535,6 +591,20 @@ const Recipes = () => {
                 <option value="weight_gain">Weight gain</option>
                 <option value="build_muscle">Build muscle</option>
               </select>
+              <select value={profileForm.dietary_preference} onChange={(e) => setProfileForm((c) => ({ ...c, dietary_preference: e.target.value }))} className="rounded-md border border-border bg-secondary px-3 py-2 text-foreground">
+                <option value="balanced">Balanced</option>
+                <option value="high_protein">High protein</option>
+                <option value="vegetarian">Vegetarian</option>
+                <option value="vegan">Vegan</option>
+                <option value="low_carb">Low carb</option>
+              </select>
+              <Textarea
+                placeholder="Allergies or foods to avoid"
+                value={profileForm.allergies}
+                onChange={(e) => setProfileForm((c) => ({ ...c, allergies: e.target.value }))}
+                className="sm:col-span-2 bg-secondary border-border"
+                rows={2}
+              />
             </div>
             <Button onClick={saveProfile} className="mt-4 w-full bg-primary text-primary-foreground">
               Save meal goal
@@ -566,6 +636,16 @@ const Recipes = () => {
               </div>
             ))}
           </div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-4 rounded-2xl border border-primary/20 bg-black/10 p-4"
+          >
+            <p className="text-sm text-white/85">
+              Best experience: save your weight, height, target weight, meals per day, and food preferences, then scan meals with a serving hint.
+            </p>
+          </motion.div>
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-card/80 p-5">

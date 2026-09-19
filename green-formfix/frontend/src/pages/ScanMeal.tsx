@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Camera, Plus, ScanLine, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, Plus, ScanLine, Sparkles, Target, Trash2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,9 @@ type ScanEstimate = {
   protein: number;
   carbs: number;
   fat: number;
+  confidence?: number;
+  portion_basis?: string;
+  recognized_items?: string[];
 };
 
 type Meal = {
@@ -51,6 +54,11 @@ const ScanMeal = () => {
   const [mealType, setMealType] = useState("lunch");
   const [consumedAtLabel, setConsumedAtLabel] = useState("");
   const [imageData, setImageData] = useState("");
+  const [labelImageData, setLabelImageData] = useState("");
+  const [servingHint, setServingHint] = useState("");
+  const [packagingHint, setPackagingHint] = useState("");
+  const [portionCount, setPortionCount] = useState("1");
+  const [eatenOut, setEatenOut] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [estimate, setEstimate] = useState<ScanEstimate | null>(null);
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
@@ -91,10 +99,10 @@ const ScanMeal = () => {
       reader.readAsDataURL(file);
     });
 
-  const onFilePicked = async (file: File | null) => {
+  const onFilePicked = async (file: File | null, setter: (value: string) => void) => {
     if (!file) return;
     const image = await toBase64(file);
-    setImageData(image);
+    setter(image);
   };
 
   const scanMeal = async () => {
@@ -114,6 +122,11 @@ const ScanMeal = () => {
           meal_type: mealType,
           add_to_day: true,
           consumed_at_label: consumedAtLabel,
+          serving_hint: servingHint,
+          packaging_hint: packagingHint,
+          nutrition_label_image: labelImageData || null,
+          portion_count: portionCount ? Number(portionCount) : null,
+          eaten_out: eatenOut,
         }),
       });
       const data = await response.json();
@@ -195,13 +208,17 @@ const ScanMeal = () => {
             <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/80">Vision calories</p>
             <h2 className="mt-1 font-display text-3xl text-foreground">Scan what you're eating</h2>
             <p className="mt-2 text-sm text-white/80">
-              Upload a picture of your food. The LLM estimates calories and macros, then adds it to today's meal log.
+              Upload a clear top-down food photo. Add portion or packaging hints so the estimate is tighter on phone photos.
             </p>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
                 <Label>Food Photo</Label>
-                <Input type="file" accept="image/*" onChange={(e) => onFilePicked(e.target.files?.[0] || null)} className="mt-1 bg-secondary border-border" />
+                <Input type="file" accept="image/*" onChange={(e) => onFilePicked(e.target.files?.[0] || null, setImageData)} className="mt-1 bg-secondary border-border" />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Nutrition label / package photo (optional)</Label>
+                <Input type="file" accept="image/*" onChange={(e) => onFilePicked(e.target.files?.[0] || null, setLabelImageData)} className="mt-1 bg-secondary border-border" />
               </div>
               <div>
                 <Label>Meal Type</Label>
@@ -225,10 +242,50 @@ const ScanMeal = () => {
                   className="mt-1 bg-secondary border-border"
                 />
               </div>
+              <div>
+                <Label>Serving hint</Label>
+                <Input
+                  value={servingHint}
+                  onChange={(e) => setServingHint(e.target.value)}
+                  placeholder="1 bowl, 2 slices, 250 ml"
+                  className="mt-1 bg-secondary border-border"
+                />
+              </div>
+              <div>
+                <Label>Portion count</Label>
+                <Input
+                  type="number"
+                  value={portionCount}
+                  onChange={(e) => setPortionCount(e.target.value)}
+                  placeholder="1"
+                  className="mt-1 bg-secondary border-border"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Packaging or label hint</Label>
+                <Input
+                  value={packagingHint}
+                  onChange={(e) => setPackagingHint(e.target.value)}
+                  placeholder="Pack says 220 cal per serving, protein yogurt, restaurant rice bowl"
+                  className="mt-1 bg-secondary border-border"
+                />
+              </div>
+              <label className="md:col-span-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={eatenOut}
+                  onChange={(e) => setEatenOut(e.target.checked)}
+                  className="h-4 w-4 accent-current"
+                />
+                I ate this outside, so estimate restaurant-style portions
+              </label>
             </div>
 
             {imageData ? (
               <img src={imageData} alt="Meal preview" className="mt-4 h-56 w-full rounded-2xl object-cover" />
+            ) : null}
+            {labelImageData ? (
+              <img src={labelImageData} alt="Label preview" className="mt-3 h-40 w-full rounded-2xl object-cover" />
             ) : null}
 
             <Button onClick={scanMeal} disabled={isScanning} className="mt-4 w-full bg-primary text-primary-foreground">
@@ -249,6 +306,11 @@ const ScanMeal = () => {
                     <div>
                       <p className="font-heading text-2xl text-foreground">{estimate.title}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{estimate.description}</p>
+                      {estimate.portion_basis ? (
+                        <p className="mt-2 text-xs uppercase tracking-widest text-primary/70">
+                          Portion basis: {estimate.portion_basis}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -268,6 +330,27 @@ const ScanMeal = () => {
                     </div>
                   ))}
                 </div>
+                {estimate.recognized_items?.length ? (
+                  <div className="rounded-2xl border border-white/10 bg-black/10 p-3">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Recognized items</p>
+                    <p className="mt-2 text-sm text-foreground">{estimate.recognized_items.join(", ")}</p>
+                  </div>
+                ) : null}
+                {typeof estimate.confidence === "number" ? (
+                  <div className="rounded-2xl border border-white/10 bg-black/10 p-3">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Scan confidence</p>
+                    <div className="mt-2">
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.round(estimate.confidence * 100)}%` }}
+                          className="h-full rounded-full bg-primary"
+                        />
+                      </div>
+                      <p className="mt-2 text-sm text-foreground">{Math.round(estimate.confidence * 100)}%</p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-white/10 bg-black/10 p-6 text-center">
@@ -278,6 +361,39 @@ const ScanMeal = () => {
               </div>
             )}
           </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-3">
+          {[
+            {
+              icon: Camera,
+              title: "Clear framing",
+              copy: "Keep the full meal visible and avoid strong shadows or mixed backgrounds.",
+            },
+            {
+              icon: Target,
+              title: "Portion cues",
+              copy: "Add bowl, slice, cup, or packet details so the estimate is less generic.",
+            },
+            {
+              icon: Sparkles,
+              title: "Label support",
+              copy: "Upload the package or nutrition label photo when available for a tighter estimate.",
+            },
+          ].map((item, index) => (
+            <motion.div
+              key={item.title}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.08 }}
+              className="rounded-3xl border border-white/10 bg-card/70 p-5"
+            >
+              <item.icon className="h-5 w-5 text-primary" />
+              <h3 className="mt-3 text-2xl text-foreground">{item.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{item.copy}</p>
+            </motion.div>
+          ))}
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">

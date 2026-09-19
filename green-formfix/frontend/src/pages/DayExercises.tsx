@@ -40,7 +40,16 @@ type ExerciseReport = {
     what_went_well: string;
     improve_next: string;
     coach_tip: string;
+    progress_since_last?: string;
+    still_to_improve?: string;
   };
+  previous_report?: {
+    created_at?: string | null;
+    average_rep_quality?: number;
+    accuracy?: number;
+  } | null;
+  progress_since_last?: string | null;
+  still_to_improve?: string | null;
 };
 
 const DayExercises = () => {
@@ -264,6 +273,26 @@ const DayExercises = () => {
                 <p className="mt-2 text-sm text-white/85 leading-relaxed">
                   {latestReport.report?.coach_tip}
                 </p>
+                {(latestReport.progress_since_last || latestReport.report?.progress_since_last) && (
+                  <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3">
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-emerald-300">
+                      Progress Since Last Report
+                    </p>
+                    <p className="mt-2 text-sm text-white/85 leading-relaxed">
+                      {latestReport.progress_since_last || latestReport.report?.progress_since_last}
+                    </p>
+                  </div>
+                )}
+                {(latestReport.still_to_improve || latestReport.report?.still_to_improve) && (
+                  <div className="mt-3 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3">
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-amber-200">
+                      Still To Improve
+                    </p>
+                    <p className="mt-2 text-sm text-white/85 leading-relaxed">
+                      {latestReport.still_to_improve || latestReport.report?.still_to_improve}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>

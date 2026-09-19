@@ -36,6 +36,7 @@ type AiResult = {
   tracked_angle_label?: string;
   tracked_angle_definition?: string;
   common_mistake: string;
+  processing_ms?: number;
   ready: boolean;
 };
 
@@ -73,10 +74,14 @@ const Camera = () => {
   const { videoRef, isActive, error } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
+  const smoothedLandmarksRef = useRef<Landmark[] | null>(null);
   const requestInFlight = useRef(false);
+  const loopTimeoutRef = useRef<number | null>(null);
+  const processingMsRef = useRef(0);
   const lastSpokenRef = useRef("");
   const lastSpokenAtRef = useRef(0);
   const milestonesSpokenRef = useRef<Set<number>>(new Set());
+  const preferredVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
 
   const [aiResult, setAiResult] = useState<AiResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -112,15 +117,39 @@ const Camera = () => {
     if (!voiceEnabled || !("speechSynthesis" in window)) return;
     if (!text || text === "Good form" || text === lastSpokenRef.current) return;
     const now = Date.now();
-    if (now - lastSpokenAtRef.current < 2200) return;
+    if (now - lastSpokenAtRef.current < 2600) return;
+    if (window.speechSynthesis.speaking) return;
 
-    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.92;
-    utterance.pitch = 0.95;
+    utterance.rate = 0.88;
+    utterance.pitch = 0.82;
+    utterance.volume = 1;
+    if (preferredVoiceRef.current) {
+      utterance.voice = preferredVoiceRef.current;
+    }
     window.speechSynthesis.speak(utterance);
     lastSpokenRef.current = text;
     lastSpokenAtRef.current = now;
+  };
+
+  const pickPreferredVoice = () => {
+    if (!("speechSynthesis" in window)) return;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return;
+    const preferredNames = [
+      "Daniel",
+      "Alex",
+      "Google UK English Male",
+      "Aaron",
+      "Fred",
+      "Microsoft David",
+      "Microsoft Guy",
+    ];
+    preferredVoiceRef.current =
+      voices.find((voice) => preferredNames.some((name) => voice.name.includes(name))) ||
+      voices.find((voice) => /male|daniel|alex|david|guy/i.test(`${voice.name} ${voice.voiceURI}`)) ||
+      voices[0] ||
+      null;
   };
 
   const drawSkeleton = (landmarks: Landmark[]) => {
@@ -135,14 +164,31 @@ const Camera = () => {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = "rgba(14, 165, 233, 0.95)";
-    ctx.shadowColor = "rgba(14, 165, 233, 0.8)";
-    ctx.shadowBlur = 16;
+
+    const previous = smoothedLandmarksRef.current;
+    const smoothing = previous ? 0.62 : 1;
+    const smoothed = landmarks.map((landmark, index) => {
+      const prior = previous?.[index];
+      if (!prior) return { ...landmark };
+      return {
+        x: prior.x + (landmark.x - prior.x) * smoothing,
+        y: prior.y + (landmark.y - prior.y) * smoothing,
+        z: prior.z + (landmark.z - prior.z) * smoothing,
+        visibility: prior.visibility + (landmark.visibility - prior.visibility) * 0.7,
+      };
+    });
+    smoothedLandmarksRef.current = smoothed;
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 5.5;
+    ctx.strokeStyle = "rgba(14, 165, 233, 0.92)";
+    ctx.shadowColor = "rgba(14, 165, 233, 0.75)";
+    ctx.shadowBlur = 14;
 
     POSE_CONNECTIONS.forEach(([start, end]) => {
-      const a = landmarks[start];
-      const b = landmarks[end];
+      const a = smoothed[start];
+      const b = smoothed[end];
       if (!a || !b || a.visibility < 0.35 || b.visibility < 0.35) return;
       ctx.beginPath();
       ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
@@ -150,12 +196,12 @@ const Camera = () => {
       ctx.stroke();
     });
 
-    ctx.shadowBlur = 10;
-    landmarks.forEach((landmark) => {
+    ctx.shadowBlur = 8;
+    smoothed.forEach((landmark) => {
       if (landmark.visibility < 0.4) return;
       ctx.beginPath();
-      ctx.fillStyle = "rgba(251, 146, 60, 0.95)";
-      ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(251, 146, 60, 0.92)";
+      ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 4.5, 0, Math.PI * 2);
       ctx.fill();
     });
   };
@@ -169,11 +215,12 @@ const Camera = () => {
     requestInFlight.current = true;
     setIsAnalyzing(true);
 
-    canvas.width = 384;
-    canvas.height = Math.round((video.videoHeight / video.videoWidth) * 384);
+    const targetWidth = showSkeleton ? 352 : 320;
+    canvas.width = targetWidth;
+    canvas.height = Math.round((video.videoHeight / video.videoWidth) * targetWidth);
     const ctx = canvas.getContext("2d");
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const image = canvas.toDataURL("image/jpeg", 0.62);
+    const image = canvas.toDataURL("image/jpeg", showSkeleton ? 0.58 : 0.5);
 
     try {
       const response = await fetch(`${API_URL}/ai/analyze-frame`, {
@@ -191,6 +238,7 @@ const Camera = () => {
       if (!response.ok) throw new Error("AI analysis failed");
       const data = (await response.json()) as AiResult;
       setAiResult(data);
+      processingMsRef.current = data.processing_ms || 0;
       if (showSkeleton) {
         drawSkeleton(data.landmarks || []);
       } else {
@@ -198,6 +246,7 @@ const Camera = () => {
         if (overlayCtx && canvasRef.current) {
           overlayCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         }
+        smoothedLandmarksRef.current = null;
       }
 
       if (data.correction) speak(data.correction);
@@ -231,14 +280,38 @@ const Camera = () => {
 
   useEffect(() => {
     if (!isActive) return;
-    analyzeFrame(true);
-    const interval = window.setInterval(() => analyzeFrame(false), 320);
-    return () => window.clearInterval(interval);
+
+    let cancelled = false;
+    const runLoop = async (reset = false) => {
+      if (cancelled) return;
+      await analyzeFrame(reset);
+      if (cancelled) return;
+      const processingMs = processingMsRef.current;
+      const baseDelay = showSkeleton ? 230 : 150;
+      const adaptiveDelay = Math.max(baseDelay, Math.min(320, processingMs + 45));
+      loopTimeoutRef.current = window.setTimeout(() => runLoop(false), adaptiveDelay);
+    };
+
+    runLoop(true);
+    return () => {
+      cancelled = true;
+      smoothedLandmarksRef.current = null;
+      if (loopTimeoutRef.current) {
+        window.clearTimeout(loopTimeoutRef.current);
+      }
+    };
   }, [isActive, sessionId, targetExerciseName, showSkeleton]);
 
   useEffect(() => {
+    pickPreferredVoice();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = pickPreferredVoice;
+    }
     return () => {
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.onvoiceschanged = null;
+      }
     };
   }, []);
 
@@ -280,6 +353,10 @@ const Camera = () => {
         body: JSON.stringify({
           session_id: sessionId,
           exercise: targetExerciseName,
+          user_id: fitUser?.user_id ?? null,
+          plan_id: planId,
+          day_id: dayId,
+          exercise_id: selectedExercise?.id || "",
         }),
       });
       if (!response.ok) return;
