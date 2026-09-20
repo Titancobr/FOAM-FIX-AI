@@ -29,7 +29,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY core/ /app/core/
 COPY utils/ /app/utils/
 COPY models/ /app/models/
-COPY dataset/processed/ /app/dataset/processed/
 
 # Copy backend service code
 COPY green-formfix/backend/ /app/green-formfix/backend/
