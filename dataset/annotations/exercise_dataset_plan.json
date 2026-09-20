@@ -1,0 +1,285 @@
+{
+  "goal": "High-accuracy real-time exercise recognition and form guidance for exercises shown in the app screenshots.",
+  "target_accuracy_note": "85%+ is realistic for the real-time-ready exercise families if the final dataset is balanced, cleaned, and dominated by custom videos collected in the same camera setup as deployment. It is not realistic to guarantee 85%+ across every machine-based exercise from a single webcam.",
+  "hardware_profile": {
+    "device": "Apple Silicon Mac M2",
+    "recommendation": "Use MediaPipe landmarks plus BiLSTM for the primary model. Use TensorFlow Metal only for training experiments.",
+    "realtime_reason": "Landmark extraction is the main real-time bottleneck, so lightweight skeleton models are preferable to raw-video CNNs."
+  },
+  "exercise_families": [
+    {
+      "dataset_group": "horizontal_press",
+      "app_exercises": [
+        "barbell_bench_press",
+        "flat_bench_press",
+        "incline_bench_press"
+      ],
+      "realtime_ready": false,
+      "priority": "medium",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 80,
+        "public_benchmark_percent": 20
+      },
+      "note": "Bench variants are valuable for recognition, but robust real-time correction from one webcam is harder because the athlete is lying down and weights occlude joints."
+    },
+    {
+      "dataset_group": "vertical_press",
+      "app_exercises": [
+        "overhead_press",
+        "military_press"
+      ],
+      "realtime_ready": true,
+      "priority": "high",
+      "public_dataset_support": "medium",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 70,
+        "public_benchmark_percent": 30
+      },
+      "note": "Excellent candidate for real-time correction using elbow and shoulder landmarks."
+    },
+    {
+      "dataset_group": "chest_fly",
+      "app_exercises": [
+        "incline_dumbbell_fly",
+        "cable_fly",
+        "dumbbell_fly"
+      ],
+      "realtime_ready": false,
+      "priority": "medium",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 90,
+        "public_benchmark_percent": 10
+      },
+      "note": "Need custom videos because public datasets rarely isolate fly movements cleanly."
+    },
+    {
+      "dataset_group": "lateral_raise",
+      "app_exercises": [
+        "lateral_raise"
+      ],
+      "realtime_ready": true,
+      "priority": "high",
+      "public_dataset_support": "medium",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 70,
+        "public_benchmark_percent": 30
+      },
+      "note": "Strong webcam candidate with fast inference and good angle-based correction."
+    },
+    {
+      "dataset_group": "tricep_extension",
+      "app_exercises": [
+        "tricep_pushdown",
+        "skull_crusher",
+        "overhead_tricep_extension"
+      ],
+      "realtime_ready": false,
+      "priority": "medium",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 90,
+        "public_benchmark_percent": 10
+      },
+      "note": "Custom footage is essential, especially for cable pushdowns."
+    },
+    {
+      "dataset_group": "dip",
+      "app_exercises": [
+        "dips"
+      ],
+      "realtime_ready": true,
+      "priority": "medium",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 85,
+        "public_benchmark_percent": 15
+      },
+      "note": "Works better from a side view with body fully visible."
+    },
+    {
+      "dataset_group": "row",
+      "app_exercises": [
+        "barbell_row",
+        "seated_cable_row"
+      ],
+      "realtime_ready": true,
+      "priority": "high",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 80,
+        "public_benchmark_percent": 20
+      },
+      "note": "Barbell row is practical. Seated cable row is more occluded and should be treated as secondary."
+    },
+    {
+      "dataset_group": "vertical_pull",
+      "app_exercises": [
+        "lat_pulldown",
+        "pull_up"
+      ],
+      "realtime_ready": true,
+      "priority": "high",
+      "public_dataset_support": "medium",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 65,
+        "public_benchmark_percent": 35
+      },
+      "note": "Pull-ups are easier to benchmark publicly; lat pulldowns still need custom gym data."
+    },
+    {
+      "dataset_group": "rear_delt_pull",
+      "app_exercises": [
+        "face_pull"
+      ],
+      "realtime_ready": false,
+      "priority": "low",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 95,
+        "public_benchmark_percent": 5
+      },
+      "note": "Good for app completeness, but not ideal for the first high-accuracy milestone."
+    },
+    {
+      "dataset_group": "curl",
+      "app_exercises": [
+        "barbell_curl",
+        "hammer_curl",
+        "preacher_curl"
+      ],
+      "realtime_ready": true,
+      "priority": "high",
+      "public_dataset_support": "medium",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 70,
+        "public_benchmark_percent": 30
+      },
+      "note": "One of the best families for 85%+ accuracy with a webcam."
+    },
+    {
+      "dataset_group": "squat",
+      "app_exercises": [
+        "squat",
+        "barbell_squat"
+      ],
+      "realtime_ready": true,
+      "priority": "highest",
+      "public_dataset_support": "strong",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 60,
+        "public_benchmark_percent": 40
+      },
+      "note": "Best overall candidate for accurate, fast real-time coaching."
+    },
+    {
+      "dataset_group": "single_leg_squat",
+      "app_exercises": [
+        "bulgarian_split_squat"
+      ],
+      "realtime_ready": true,
+      "priority": "medium",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 85,
+        "public_benchmark_percent": 15
+      },
+      "note": "Needs custom videos from a consistent side/front angle."
+    },
+    {
+      "dataset_group": "hip_hinge",
+      "app_exercises": [
+        "deadlift",
+        "romanian_deadlift"
+      ],
+      "realtime_ready": true,
+      "priority": "highest",
+      "public_dataset_support": "medium",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 75,
+        "public_benchmark_percent": 25
+      },
+      "note": "Very strong project family because hip angle cues are visible and meaningful."
+    },
+    {
+      "dataset_group": "calf_raise",
+      "app_exercises": [
+        "calf_raise"
+      ],
+      "realtime_ready": false,
+      "priority": "low",
+      "public_dataset_support": "weak",
+      "recommended_source_mix": {
+        "custom_gym_videos_percent": 95,
+        "public_benchmark_percent": 5
+      },
+      "note": "De-prioritize for phase 1 because ankle-level motion is small in a normal webcam setup."
+    }
+  ],
+  "public_dataset_mapping": {
+    "Kinetics-400": {
+      "use_for": [
+        "squat family",
+        "pull-up family",
+        "generic gym movement pretraining"
+      ],
+      "reason": "Broad action diversity and clip volume."
+    },
+    "NTU RGB+D": {
+      "use_for": [
+        "skeleton-sequence experiments",
+        "BiLSTM vs Transformer comparison",
+        "motion pretraining"
+      ],
+      "reason": "Most useful benchmark for temporal skeleton modeling."
+    },
+    "UCF101": {
+      "use_for": [
+        "baseline action recognition reference",
+        "supplementary public video clips"
+      ],
+      "reason": "Useful but less aligned than custom landmark data."
+    },
+    "Fitness-AQA": {
+      "use_for": [
+        "quality-assessment justification",
+        "report references for scoring and posture evaluation"
+      ],
+      "reason": "Important for literature grounding, even if direct integration is limited."
+    }
+  },
+  "phase_1_recommended_deployment_classes": [
+    "barbell_squat",
+    "deadlift",
+    "romanian_deadlift",
+    "bicep_curl",
+    "barbell_curl",
+    "hammer_curl",
+    "overhead_press",
+    "military_press",
+    "lateral_raise",
+    "pull_up",
+    "barbell_row"
+  ],
+  "phase_2_optional_classes": [
+    "barbell_bench_press",
+    "flat_bench_press",
+    "incline_bench_press",
+    "bulgarian_split_squat",
+    "lat_pulldown",
+    "dips"
+  ],
+  "phase_3_research_only_classes": [
+    "cable_fly",
+    "dumbbell_fly",
+    "incline_dumbbell_fly",
+    "tricep_pushdown",
+    "skull_crusher",
+    "overhead_tricep_extension",
+    "seated_cable_row",
+    "face_pull",
+    "preacher_curl",
+    "calf_raise"
+  ]
+}

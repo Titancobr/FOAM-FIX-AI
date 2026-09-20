@@ -12,12 +12,13 @@ class PostureAnalyzer:
         else:
             self.templates = {"default": {"good_message": "Good form", "rules": []}}
 
-    def _result(self, message, mistake_code="good_form", severity=0):
+    def _result(self, message, mistake_code="good_form", severity=0, failed_rules=None):
         return {
             "message": message,
             "mistake_code": mistake_code,
             "is_good": mistake_code == "good_form",
             "severity": severity,
+            "failed_rules": failed_rules or [],
         }
 
     def _metric_value(self, angles, metric):
@@ -59,6 +60,14 @@ class PostureAnalyzer:
             top.get("message", "Adjust your form"),
             top.get("mistake_code", "form_issue"),
             int(top.get("severity", 1)),
+            [
+                {
+                    "mistake_code": rule.get("mistake_code", "form_issue"),
+                    "severity": int(rule.get("severity", 1)),
+                    "message": rule.get("message", "Adjust your form"),
+                }
+                for rule in failed_rules
+            ],
         )
 
     def check_form(self, exercise, angles):

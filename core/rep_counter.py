@@ -3,13 +3,13 @@ from collections import deque
 
 class RepCounter:
     EXERCISE_PROFILES = {
-        "bicep_curl": {"min_range": 16.0, "up_floor_offset": 28.0, "down_ceil_offset": 32.0},
-        "barbell_curl": {"min_range": 16.0, "up_floor_offset": 28.0, "down_ceil_offset": 32.0},
-        "push_up": {"min_range": 14.0, "up_floor_offset": 38.0, "down_ceil_offset": 28.0},
-        "pull_up": {"min_range": 14.0, "up_floor_offset": 34.0, "down_ceil_offset": 26.0},
-        "lateral_raise": {"min_range": 18.0, "up_floor_offset": 20.0, "down_ceil_offset": 20.0},
-        "squat": {"min_range": 18.0, "up_floor_offset": 22.0, "down_ceil_offset": 30.0},
-        "barbell_squat": {"min_range": 18.0, "up_floor_offset": 22.0, "down_ceil_offset": 30.0},
+        "bicep_curl": {"min_range": 16.0, "up_floor_offset": 28.0, "down_ceil_offset": 32.0, "alpha": 0.58, "delta_gate": 0.08, "min_rep_gap_frames": 4},
+        "barbell_curl": {"min_range": 16.0, "up_floor_offset": 28.0, "down_ceil_offset": 32.0, "alpha": 0.58, "delta_gate": 0.08, "min_rep_gap_frames": 4},
+        "push_up": {"min_range": 14.0, "up_floor_offset": 38.0, "down_ceil_offset": 28.0, "alpha": 0.6, "delta_gate": 0.06, "min_rep_gap_frames": 5},
+        "pull_up": {"min_range": 14.0, "up_floor_offset": 34.0, "down_ceil_offset": 26.0, "alpha": 0.6, "delta_gate": 0.06, "min_rep_gap_frames": 5},
+        "lateral_raise": {"min_range": 18.0, "up_floor_offset": 20.0, "down_ceil_offset": 20.0, "alpha": 0.62, "delta_gate": 0.05, "min_rep_gap_frames": 4},
+        "squat": {"min_range": 18.0, "up_floor_offset": 22.0, "down_ceil_offset": 30.0, "alpha": 0.62, "delta_gate": 0.05, "min_rep_gap_frames": 5},
+        "barbell_squat": {"min_range": 18.0, "up_floor_offset": 22.0, "down_ceil_offset": 30.0, "alpha": 0.62, "delta_gate": 0.05, "min_rep_gap_frames": 5},
     }
 
     def __init__(
@@ -39,6 +39,9 @@ class RepCounter:
         self.min_required_range = float(profile.get("min_range", min_required_range))
         self.up_floor_offset = float(profile.get("up_floor_offset", 15.0))
         self.down_ceil_offset = float(profile.get("down_ceil_offset", 15.0))
+        self.smoothing_alpha = float(profile.get("alpha", 0.55))
+        self.delta_gate = float(profile.get("delta_gate", 0.08))
+        self.min_rep_gap_frames = int(profile.get("min_rep_gap_frames", min_rep_gap_frames))
 
         self.observed_min = None
         self.observed_max = None
@@ -47,7 +50,7 @@ class RepCounter:
         if self.last_smoothed is None:
             smoothed = raw_angle
         else:
-            alpha = 0.45
+            alpha = self.smoothing_alpha
             smoothed = (alpha * raw_angle) + ((1.0 - alpha) * self.last_smoothed)
         self.last_smoothed = smoothed
         self.metric_history.append(smoothed)
@@ -101,10 +104,10 @@ class RepCounter:
 
         target_stage = None
         # Move into the bottom phase only when angle is going down.
-        if self.stage == "up" and angle <= down_threshold and avg_delta <= -0.2:
+        if self.stage == "up" and angle <= down_threshold and avg_delta <= -self.delta_gate:
             target_stage = "down"
         # Move into the top phase only when angle is going up.
-        elif self.stage == "down" and angle >= up_threshold and avg_delta >= 0.2:
+        elif self.stage == "down" and angle >= up_threshold and avg_delta >= self.delta_gate:
             target_stage = "up"
 
         if target_stage is None:

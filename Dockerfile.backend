@@ -1,0 +1,50 @@
+# FormFix AI Trainer Backend Dockerfile
+FROM python:3.10-slim
+
+# Prevent interactive prompts during apt install
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies required for OpenCV, MediaPipe, and audio/video processing
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libgl1 \
+    libglib2.0-0 \
+    curl \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies first for caching
+COPY green-formfix/backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy core ML logic, configs, utilities, and models
+COPY core/ /app/core/
+COPY utils/ /app/utils/
+COPY models/ /app/models/
+COPY dataset/processed/ /app/dataset/processed/
+
+# Copy backend service code
+COPY green-formfix/backend/ /app/green-formfix/backend/
+
+# Ensure SQLite data directory can be written to
+RUN mkdir -p /app/green-formfix/backend/data
+
+# Configure Python path so imports from root (core, utils, models) and backend work seamlessly
+ENV PYTHONPATH=/app:/app/green-formfix/backend
+
+WORKDIR /app/green-formfix/backend
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

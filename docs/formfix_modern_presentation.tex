@@ -1,0 +1,347 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{multicol}
+\usepackage{ragged2e}
+
+\definecolor{FormFixBlue}{RGB}{0,163,255}
+\definecolor{DarkBG}{RGB}{14,17,23}
+\definecolor{SoftGray}{RGB}{180,188,200}
+
+\setbeamercolor{background canvas}{bg=DarkBG}
+\setbeamercolor{normal text}{fg=white}
+\setbeamercolor{frametitle}{bg=DarkBG, fg=FormFixBlue}
+\setbeamercolor{title}{fg=FormFixBlue}
+\setbeamercolor{progress bar}{fg=FormFixBlue, bg=gray}
+\setbeamercolor{block title}{bg=FormFixBlue!18, fg=white}
+\setbeamercolor{block body}{bg=white!4, fg=white}
+
+\newcommand{\problemvisual}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-12 at 3.03.57 AM.png}}
+\newcommand{\objectiveicon}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-12 at 3.06.01 PM.png}}
+\newcommand{\overallarchitecture}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-12 at 3.05.49 PM.png}}
+\newcommand{\trainingarchitecture}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-12 at 3.06.01 PM.png}}
+\newcommand{\bilstmfig}{\detokenize{/Users/syedahmed/Downloads/Bidirectional LSTM-2026-04-12-094513.png}}
+\newcommand{\lstmfig}{\detokenize{/Users/syedahmed/Downloads/Bidirectional LSTM-2026-04-12-101325.png}}
+\newcommand{\transformerfig}{\detokenize{/Users/syedahmed/Downloads/Bidirectional LSTM-2026-04-12-101602.png}}
+\newcommand{\accfig}{\detokenize{/Users/syedahmed/AI-Trainer/reports/analytics/accuracy_vs_epoch.png}}
+\newcommand{\lossfig}{\detokenize{/Users/syedahmed/AI-Trainer/reports/analytics/loss_vs_epoch.png}}
+\newcommand{\cmfig}{\detokenize{/Users/syedahmed/AI-Trainer/reports/analytics/confusion_matrix.png}}
+\newcommand{\lstmtrainlog}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-13 at 12.29.23 AM.png}}
+\newcommand{\transformertrainlog}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-13 at 12.26.58 AM.png}}
+\newcommand{\workoutreport}{\detokenize{/Users/syedahmed/Documents/Screenshot 2026-04-12 at 3.03.57 AM.png}}
+
+\title[FormFix AI]{FormFix AI}
+\subtitle{Real-Time Exercise Pose Detection, Rep Counting, and Posture Correction}
+\author[Ahmed \& Muradi]{Syed Ahmed \and Vibha V Muradi}
+\institute[UVCE]{University of Visvesvaraya College of Engineering}
+\date{May 4, 2026}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{The Challenge in Home Fitness}
+    \begin{columns}[T]
+        \begin{column}{0.52\textwidth}
+            \textbf{The Supervision Gap}
+            \begin{itemize}
+                \item Improper form increases injury risk.
+                \item Manual rep counting distracts the user.
+                \item Most systems recognize the exercise but do not judge movement quality.
+            \end{itemize}
+
+            \vspace{0.3cm}
+            \textbf{What FormFix AI Solves}
+            \begin{itemize}
+                \item real-time exercise classification,
+                \item accurate rep counting,
+                \item posture correction using joint angles,
+                \item web-based progress tracking and workout reports.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.44\textwidth}
+            \centering
+            \includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{\problemvisual}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Objectives: Beyond Recognition}
+    \begin{columns}[T]
+        \begin{column}{0.58\textwidth}
+            \begin{enumerate}
+                \item \textbf{Real-Time Perception:} detect skeleton landmarks from webcam video.
+                \item \textbf{Temporal Intelligence:} compare LSTM, BiLSTM, and Transformer models.
+                \item \textbf{Biomechanical Validation:} use joint-angle rules for posture correction.
+                \item \textbf{Feedback Loop:} provide live voice and visual guidance.
+                \item \textbf{Persistence:} store user workout progress and reports in SQL.
+            \end{enumerate}
+        \end{column}
+        \begin{column}{0.38\textwidth}
+            \centering
+            \includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{\objectiveicon}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{The Hybrid Intelligence Architecture}
+    \centering
+    \includegraphics[width=0.82\textwidth,height=0.76\textheight,keepaspectratio]{\overallarchitecture}
+\end{frame}
+
+\begin{frame}{From Video to Sequential Features}
+    \begin{columns}[T]
+        \begin{column}{0.48\textwidth}
+            \textbf{Dataset Specs}
+            \begin{itemize}
+                \item Processed sequences: \textbf{1140}
+                \item Features per frame: \textbf{132}
+                \item Time window: \textbf{30 frames}
+                \item Classes: \textbf{6}
+            \end{itemize}
+
+            \vspace{0.2cm}
+            \textbf{Angle Formula}
+            \[
+            \theta = \cos^{-1}\left(\frac{(A-B)\cdot(C-B)}{\lVert A-B\rVert \, \lVert C-B\rVert}\right)
+            \]
+
+            \vspace{0.1cm}
+            \textbf{Class Distribution}
+            \begin{itemize}
+                \item barbell\_squat: 152
+                \item bicep\_curl: 225
+                \item hammer\_curl: 78
+                \item lateral\_raise: 170
+                \item pull\_up: 212
+                \item push\_up: 303
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{\trainingarchitecture}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Model Strategy: Why Three Models?}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{p{2.2cm} p{3.2cm} p{5.1cm}}
+            \toprule
+            \textbf{Model} & \textbf{Role} & \textbf{Reason for Use} \\
+            \midrule
+            LSTM & Baseline model & Lightweight and fast sequence model for comparison. \\
+            BiLSTM & Main temporal model & Uses forward and backward context; stronger motion understanding. \\
+            Transformer & Advanced comparison & Uses self-attention for long-range frame relationships. \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \vspace{0.3cm}
+    \centering
+    \textbf{Deployment logic:} the system supports \textit{Fast}, \textit{Best}, \textit{Hybrid}, and \textit{Ensemble} modes.\\
+    In practice, BiLSTM is weighted highest in the hybrid pipeline.
+\end{frame}
+
+\begin{frame}{LSTM, BiLSTM and Transformer Architectures}
+    \begin{columns}[T]
+        \begin{column}{0.32\textwidth}
+            \includegraphics[width=\textwidth,height=0.24\textheight,keepaspectratio]{\lstmfig}
+            \vspace{0.08cm}
+            \scriptsize \textbf{LSTM:} single-direction temporal baseline.
+        \end{column}
+        \begin{column}{0.32\textwidth}
+            \includegraphics[width=\textwidth,height=0.24\textheight,keepaspectratio]{\bilstmfig}
+            \vspace{0.08cm}
+            \scriptsize \textbf{BiLSTM:} bidirectional temporal classifier.
+        \end{column}
+        \begin{column}{0.32\textwidth}
+            \includegraphics[width=\textwidth,height=0.24\textheight,keepaspectratio]{\transformerfig}
+            \vspace{0.08cm}
+            \scriptsize \textbf{Transformer:} attention-based sequence model.
+        \end{column}
+    \end{columns}
+
+    \vspace{0.25cm}
+    \begin{block}{Working Principle}
+    All three models receive the same 30-frame pose-angle sequence, but they learn motion dependencies differently. They are trained independently and then compared for speed, stability, and accuracy.
+    \end{block}
+\end{frame}
+
+\begin{frame}{Validation Engines: Counting and Correction}
+    \begin{multicols}{2}
+        \textbf{Repetition Counting}
+        \begin{itemize}
+            \item exercise-specific tracked angle,
+            \item smoothing and direction gating,
+            \item stage transitions such as up/down,
+            \item threshold validation before incrementing rep count.
+        \end{itemize}
+
+        \columnbreak
+
+        \textbf{Posture Correction}
+        \begin{itemize}
+            \item elbow, knee, shoulder, and hip angles,
+            \item rule templates for each exercise,
+            \item mistake codes such as elbow instability or insufficient depth,
+            \item live voice cue and end-of-exercise report.
+        \end{itemize}
+    \end{multicols}
+
+    \vspace{0.2cm}
+    \centering
+    \includegraphics[width=0.78\textwidth,height=0.3\textheight,keepaspectratio]{\problemvisual}
+\end{frame}
+
+\begin{frame}{Training and Evaluation Snapshots}
+    \begin{columns}[T]
+        \begin{column}{0.49\textwidth}
+            \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{\lstmtrainlog}
+        \end{column}
+        \begin{column}{0.49\textwidth}
+            \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{\transformertrainlog}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Quantitative Results}
+    \begin{columns}[T]
+        \begin{column}{0.42\textwidth}
+            \textbf{Current Results}
+            \begin{itemize}
+                \item LSTM Top-1: \textbf{84.30\%}
+                \item BiLSTM Top-1: \textbf{93.72\%}
+                \item BiLSTM Top-3: \textbf{99.82\%}
+                \item Transformer Top-1: \textbf{97.89\%}
+            \end{itemize}
+
+            \vspace{0.2cm}
+            \textbf{BiLSTM Quality Metrics}
+            \begin{itemize}
+                \item Weighted F1-score: \textbf{93.64\%}
+                \item Macro F1-score: \textbf{91.69\%}
+            \end{itemize}
+
+            \vspace{0.2cm}
+            \textbf{Strongest classes}
+            \begin{itemize}
+                \item push\_up: F1 \textbf{0.997}
+                \item pull\_up: recall \textbf{1.00}
+                \item barbell\_squat: F1 \textbf{0.94}
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.54\textwidth}
+            \centering
+            \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{\cmfig}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{How Accuracy Is Calculated}
+    \small
+    \textbf{Top-1 Accuracy}
+    \[
+    \text{Top-1} = \frac{\text{Correct highest-confidence predictions}}{\text{Total predictions}} \times 100
+    \]
+
+    \textbf{Top-3 Accuracy}
+    \[
+    \text{Top-3} = \frac{\text{True class inside top 3 predictions}}{\text{Total predictions}} \times 100
+    \]
+
+    \textbf{Precision, Recall, F1-score}
+    \[
+    \text{Precision}=\frac{TP}{TP+FP},\quad
+    \text{Recall}=\frac{TP}{TP+FN},\quad
+    \text{F1}=2\cdot\frac{PR}{P+R}
+    \]
+
+    \vspace{0.2cm}
+    \begin{columns}[T]
+        \begin{column}{0.49\textwidth}
+            \includegraphics[width=\textwidth,height=0.28\textheight,keepaspectratio]{\accfig}
+        \end{column}
+        \begin{column}{0.49\textwidth}
+            \includegraphics[width=\textwidth,height=0.28\textheight,keepaspectratio]{\lossfig}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Integrated Web Application}
+    \begin{columns}[T]
+        \begin{column}{0.46\textwidth}
+            \centering
+            \includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{\workoutreport}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \textbf{Implemented System Components}
+            \begin{itemize}
+                \item FastAPI backend for live frame analysis,
+                \item React frontend for workout and nutrition flows,
+                \item SQL-based user progress tracking,
+                \item meal planner, scan-to-calorie flow, and recipe CRUD,
+                \item session reports with perfect reps, corrected reps, and common mistakes.
+            \end{itemize}
+
+            \vspace{0.2cm}
+            \textbf{Improvement over surveyed papers}
+            \begin{itemize}
+                \item not only recognition,
+                \item not only pose correction,
+                \item but a full usable coaching application.
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Final Summary and Future Work}
+    \begin{block}{Key Takeaway}
+        FormFix AI turns research ideas from pose estimation, sequential learning, and biomechanical validation into a practical real-time fitness trainer.
+    \end{block}
+
+    \begin{columns}[T]
+        \begin{column}{0.5\textwidth}
+            \textbf{Future Improvements}
+            \begin{itemize}
+                \item expand to deadlift and overhead press,
+                \item create a stricter unseen holdout benchmark,
+                \item improve mobile deployment,
+                \item add multi-view support,
+                \item improve browser-side speed and user-specific calibration.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.45\textwidth}
+            \textbf{Conclusion}
+            \begin{itemize}
+                \item strong real-time pipeline,
+                \item high current classification performance,
+                \item deployable UI plus database integration,
+                \item clear scope for improvement and scale.
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}
+    \centering
+    \Huge \textcolor{FormFixBlue}{Thank You}
+
+    \vspace{0.4cm}
+    \Large \textbf{FormFix AI}
+
+    \vspace{0.2cm}
+    \small Questions?
+\end{frame}
+
+\end{document}

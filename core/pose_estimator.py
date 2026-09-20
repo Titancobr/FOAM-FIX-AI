@@ -6,8 +6,8 @@ class PoseEstimator:
     def __init__(
         self,
         model_complexity=0,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
+        min_detection_confidence=0.45,
+        min_tracking_confidence=0.45,
     ):
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
@@ -20,7 +20,9 @@ class PoseEstimator:
 
     def detect(self, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        rgb.flags.writeable = False
         results = self.pose.process(rgb)
+        rgb.flags.writeable = True
         landmarks = []
         if results.pose_landmarks:
             for lm in results.pose_landmarks.landmark:

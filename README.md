@@ -150,6 +150,34 @@ For best results:
 - Explore lightweight model versions for broader device support    
 
 ---
-## Deployment
-[How to run will be added later]
+## Deployment (Docker & Cross-Platform)
 
+The full platform (React frontend + FastAPI backend + MediaPipe/TensorFlow AI engine) is fully containerized.
+
+### Running on Windows (1-Click)
+
+1. Ensure **Docker Desktop** is installed and running.
+2. Double-click **`run_windows.bat`** (or execute `./run_windows.ps1` in PowerShell).
+3. The script will build and launch containers, then automatically open **`http://localhost:3000`** in your browser.
+4. Allow webcam access in your browser and start working out!
+5. To stop, run **`stop_windows.bat`** or `docker compose down`.
+
+For detailed Windows setup steps and troubleshooting, see [WINDOWS_SETUP.md](file:///Users/syedahmed/AI-Trainer/WINDOWS_SETUP.md).
+
+### Running on Mac / Linux
+
+```bash
+# Start all services with 1 command:
+./run_mac_linux.sh
+
+# Or directly with Docker Compose:
+docker compose up --build -d
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Key Endpoints
+- **Frontend App**: `http://localhost:3000`
+- **Backend API**: `http://localhost:8000`
+- **Swagger Docs**: `http://localhost:8000/docs`
+- **Health Check**: `http://localhost:8000/health`

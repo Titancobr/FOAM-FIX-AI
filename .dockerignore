@@ -1,0 +1,35 @@
+# Huge media and raw datasets (4.9 GB raw_videos.zip)
+raw_videos.zip
+dataset/raw_videos/
+dataset/*.pdf
+
+# Virtual environments
+ai-trainer/
+**/venv/
+**/.venv/
+env/
+
+# Node dependencies and build artifacts
+**/node_modules/
+green-formfix/frontend/dist/
+
+# Git and OS metadata
+.git/
+.gitignore
+**/.DS_Store
+.DS_Store
+Thumbs.db
+
+# Python bytecode and caches
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Local databases and logs
+*.log
+scratch/

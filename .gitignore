@@ -1,28 +1,41 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
 
 # Virtual environments
 venv/
 .venv/
-lib/
+ai-trainer/
 
-# Mac
+# Environment and local DB
+.env
+*.db
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+
+# Notebooks and editor artifacts
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# OS files
 .DS_Store
 
-# ML / large files
-*.h5
-*.pt
-*.pth
-*.pb
+# Large or generated training artifacts
+reports/*.json
+reports/*.png
+reports/analytics/
 
-#others
-notebooks
-dataset 
-docs
-data.csv
-reports
+# Optional local datasets / exports
+dataset/processed/
+dataset/raw_videos/
+raw_videos.zip
+*.zip
+*.tar.gz
 
-dashboard
-ai-trainer/
-.ipynb_checkpoints/

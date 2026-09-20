@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 import models, database, auth
 from pydantic import BaseModel
@@ -38,11 +39,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {
+        "app": "FormFix AI Trainer API",
+        "status": "online",
+        "version": "1.0.0",
+        "health": "/health",
+        "docs": "/docs",
+    }
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "timestamp": time.time(),
+        "service": "formfix-backend",
+    }
+
 # 3. Create DB tables (auth + progress tracking).
 try:
     with database.engine.connect():
         print("Connected to SQL database successfully!")
     models.Base.metadata.create_all(bind=database.engine)
+    inspector = inspect(database.engine)
+    if inspector.has_table("nutrition_profiles"):
+        nutrition_columns = {column["name"] for column in inspector.get_columns("nutrition_profiles")}
+        nutrition_alters = {
+            "target_weight_kg": "ALTER TABLE nutrition_profiles ADD COLUMN target_weight_kg FLOAT",
+            "body_fat_percent": "ALTER TABLE nutrition_profiles ADD COLUMN body_fat_percent FLOAT",
+            "dietary_preference": "ALTER TABLE nutrition_profiles ADD COLUMN dietary_preference VARCHAR(40) DEFAULT 'balanced'",
+            "meals_per_day": "ALTER TABLE nutrition_profiles ADD COLUMN meals_per_day INTEGER DEFAULT 3",
+            "allergies": "ALTER TABLE nutrition_profiles ADD COLUMN allergies TEXT DEFAULT ''",
+        }
+        with database.engine.begin() as conn:
+            for column_name, stmt in nutrition_alters.items():
+                if column_name not in nutrition_columns:
+                    conn.execute(text(stmt))
+    if inspector.has_table("meal_entries"):
+        meal_columns = {column["name"] for column in inspector.get_columns("meal_entries")}
+        meal_alters = {
+            "confidence_score": "ALTER TABLE meal_entries ADD COLUMN confidence_score FLOAT",
+            "portion_basis": "ALTER TABLE meal_entries ADD COLUMN portion_basis VARCHAR(255) DEFAULT ''",
+            "recognized_items": "ALTER TABLE meal_entries ADD COLUMN recognized_items TEXT DEFAULT ''",
+        }
+        with database.engine.begin() as conn:
+            for column_name, stmt in meal_alters.items():
+                if column_name not in meal_columns:
+                    conn.execute(text(stmt))
 except Exception as e:
     print("Database setup failed:", e)
 
@@ -63,6 +107,10 @@ class AnalyzeFrameSchema(BaseModel):
 class SessionReportSchema(BaseModel):
     session_id: str
     exercise: str = "bicep_curl"
+    user_id: int | None = None
+    plan_id: str = ""
+    day_id: str = ""
+    exercise_id: str = ""
 
 
 class WorkoutExerciseUpdateSchema(BaseModel):
@@ -84,8 +132,13 @@ class NutritionProfileSchema(BaseModel):
     sex: str = "unspecified"
     height_cm: float | None = None
     weight_kg: float | None = None
+    target_weight_kg: float | None = None
+    body_fat_percent: float | None = None
     activity_level: str = "moderate"
     goal_type: str = "maintain"
+    dietary_preference: str = "balanced"
+    meals_per_day: int = 3
+    allergies: str = ""
 
 
 class RecipeSchema(BaseModel):
@@ -116,6 +169,9 @@ class MealEntrySchema(BaseModel):
     image_data: str | None = None
     recipe_id: int | None = None
     consumed_at_label: str = ""
+    confidence_score: float | None = None
+    portion_basis: str = ""
+    recognized_items: list[str] | None = None
 
 
 class MealScanSchema(BaseModel):
@@ -126,6 +182,11 @@ class MealScanSchema(BaseModel):
     add_to_day: bool = True
     date_key: str | None = None
     consumed_at_label: str = ""
+    serving_hint: str = ""
+    packaging_hint: str = ""
+    nutrition_label_image: str | None = None
+    portion_count: float | None = None
+    eaten_out: bool = False
 
 
 pose_estimator = None
@@ -274,6 +335,9 @@ def update_session_stats(session_id: str, posture_result: dict, reset: bool) -> 
             "frames": 0,
             "good_frames": 0,
             "mistakes": {},
+            "mistake_weighted": {},
+            "severity_sum": 0.0,
+            "worst_severity": 0,
             "recent_codes": [],
             "last_llm_time": 0.0,
             "last_correction": "",
@@ -283,22 +347,47 @@ def update_session_stats(session_id: str, posture_result: dict, reset: bool) -> 
             "current_rep_frames": 0,
             "current_rep_good_frames": 0,
             "current_rep_mistakes": {},
+            "current_rep_mistake_weighted": {},
+            "current_rep_severity_sum": 0.0,
+            "current_rep_worst_severity": 0,
             "perfect_reps": 0,
             "corrected_reps": 0,
+            "poor_reps": 0,
             "rep_reports": [],
         }
         session_feedback_stats[session_id] = session
 
     session["frames"] += 1
+    failed_rules = posture_result.get("failed_rules") or []
     if posture_result.get("is_good", False):
         session["good_frames"] += 1
         code = "good_form"
         session["current_rep_good_frames"] += 1
     else:
         code = posture_result.get("mistake_code", "form_issue")
-        session["mistakes"][code] = session["mistakes"].get(code, 0) + 1
-        current_rep_mistakes = session["current_rep_mistakes"]
-        current_rep_mistakes[code] = current_rep_mistakes.get(code, 0) + 1
+        severity = int(posture_result.get("severity", 1))
+        issue_weights = {}
+        if failed_rules:
+            for rule in failed_rules:
+                rule_code = rule.get("mistake_code", code)
+                rule_severity = int(rule.get("severity", severity))
+                issue_weights[rule_code] = max(issue_weights.get(rule_code, 0), rule_severity)
+        else:
+            issue_weights[code] = severity
+
+        for issue_code, issue_severity in issue_weights.items():
+            session["mistakes"][issue_code] = session["mistakes"].get(issue_code, 0) + 1
+            session["mistake_weighted"][issue_code] = session["mistake_weighted"].get(issue_code, 0.0) + issue_severity
+            current_rep_mistakes = session["current_rep_mistakes"]
+            current_rep_mistakes[issue_code] = current_rep_mistakes.get(issue_code, 0) + 1
+            current_rep_weighted = session["current_rep_mistake_weighted"]
+            current_rep_weighted[issue_code] = current_rep_weighted.get(issue_code, 0.0) + issue_severity
+
+        frame_severity = max(issue_weights.values()) if issue_weights else severity
+        session["severity_sum"] += frame_severity
+        session["worst_severity"] = max(int(session.get("worst_severity", 0)), frame_severity)
+        session["current_rep_severity_sum"] += frame_severity
+        session["current_rep_worst_severity"] = max(int(session.get("current_rep_worst_severity", 0)), frame_severity)
 
     session["current_rep_frames"] += 1
 
@@ -314,14 +403,41 @@ def finalize_rep(session: dict, reps: int):
     rep_frames = max(int(session.get("current_rep_frames", 0)), 1)
     good_frames = int(session.get("current_rep_good_frames", 0))
     rep_mistakes = dict(session.get("current_rep_mistakes", {}))
-    quality = good_frames / rep_frames
+    rep_mistake_weighted = dict(session.get("current_rep_mistake_weighted", {}))
+    severity_sum = float(session.get("current_rep_severity_sum", 0.0))
+    worst_severity = int(session.get("current_rep_worst_severity", 0))
+    good_ratio = good_frames / rep_frames
+    severity_ratio = min(1.0, severity_sum / (rep_frames * 2.5))
+    diversity_penalty = min(0.12, max(0, len(rep_mistakes) - 1) * 0.04)
+    persistence_penalty = 0.0
     dominant_mistake = ""
-    if rep_mistakes:
+    dominant_weight = 0.0
+    dominant_mistake = ""
+    if rep_mistake_weighted:
+        dominant_mistake, dominant_weight = max(rep_mistake_weighted.items(), key=lambda item: item[1])
+        persistence_penalty = min(0.18, dominant_weight / max(1.0, rep_frames * 3.0))
+    elif rep_mistakes:
         dominant_mistake = max(rep_mistakes.items(), key=lambda item: item[1])[0]
 
-    if quality >= 0.75 and not dominant_mistake:
+    quality = max(
+        0.0,
+        min(
+            1.0,
+            (0.62 * good_ratio)
+            + (0.38 * (1.0 - severity_ratio))
+            - diversity_penalty
+            - persistence_penalty
+            - (0.04 if worst_severity >= 3 else 0.0),
+        ),
+    )
+
+    if quality >= 0.88 and worst_severity <= 1 and not dominant_mistake:
         session["perfect_reps"] += 1
         verdict = "perfect"
+    elif quality < 0.6 or worst_severity >= 3:
+        session["poor_reps"] += 1
+        session["corrected_reps"] += 1
+        verdict = "major_fix"
     else:
         session["corrected_reps"] += 1
         verdict = "needs_work"
@@ -332,12 +448,19 @@ def finalize_rep(session: dict, reps: int):
             "quality_score": round(quality * 100),
             "verdict": verdict,
             "main_issue": dominant_mistake,
+            "good_frame_ratio": round(good_ratio * 100),
+            "severity_score": round(severity_ratio * 100),
+            "worst_severity": worst_severity,
+            "issues_seen": sorted(rep_mistakes.keys()),
         }
     )
 
     session["current_rep_frames"] = 0
     session["current_rep_good_frames"] = 0
     session["current_rep_mistakes"] = {}
+    session["current_rep_mistake_weighted"] = {}
+    session["current_rep_severity_sum"] = 0.0
+    session["current_rep_worst_severity"] = 0
 
 
 def decode_frame(image_data: str):
@@ -443,8 +566,58 @@ def meal_payload(meal) -> dict:
         "image_data": meal.image_data,
         "recipe_id": meal.recipe_id,
         "consumed_at_label": meal.consumed_at_label,
+        "confidence_score": meal.confidence_score,
+        "portion_basis": meal.portion_basis,
+        "recognized_items": [item for item in (meal.recognized_items or "").split("||") if item],
         "created_at": meal.created_at.isoformat() if meal.created_at else None,
         "updated_at": meal.updated_at.isoformat() if meal.updated_at else None,
+    }
+
+
+def profile_context(profile) -> str:
+    if not profile:
+        return "No user body profile saved yet."
+
+    details = [
+        f"Age: {profile.age or 'unknown'}",
+        f"Sex: {profile.sex or 'unspecified'}",
+        f"Height: {profile.height_cm or 'unknown'} cm",
+        f"Weight: {profile.weight_kg or 'unknown'} kg",
+        f"Target weight: {profile.target_weight_kg or 'not set'} kg",
+        f"Body fat: {profile.body_fat_percent or 'not set'}%",
+        f"Activity level: {profile.activity_level or 'moderate'}",
+        f"Goal: {profile.goal_type or 'maintain'}",
+        f"Diet preference: {profile.dietary_preference or 'balanced'}",
+        f"Meals per day: {profile.meals_per_day or 3}",
+        f"Allergies or avoid foods: {profile.allergies or 'none'}",
+    ]
+    return "\n".join(details)
+
+
+def serialize_previous_report(previous_report) -> dict | None:
+    if previous_report is None:
+        return None
+
+    parsed_report = {}
+    raw_report = previous_report.report_json or ""
+    if raw_report:
+        try:
+            parsed_report = json.loads(raw_report)
+        except Exception:
+            parsed_report = {}
+
+    return {
+        "exercise": previous_report.exercise_name,
+        "reps": previous_report.reps,
+        "accuracy": previous_report.accuracy,
+        "perfect_reps": previous_report.perfect_reps,
+        "corrected_reps": previous_report.corrected_reps,
+        "poor_reps": previous_report.poor_reps,
+        "average_rep_quality": previous_report.average_rep_quality,
+        "consistency_score": previous_report.consistency_score,
+        "common_mistakes": [item for item in (previous_report.common_mistakes or "").split("||") if item],
+        "report": parsed_report,
+        "created_at": previous_report.created_at.isoformat() if previous_report.created_at else None,
     }
 
 
@@ -471,24 +644,40 @@ def get_ai_components():
     return pose_estimator, feature_extractor, posture_analyzer
 
 
-def session_summary_payload(session_id: str, exercise_name: str, reps: int) -> dict:
+def session_summary_payload(session_id: str, exercise_name: str, reps: int, previous_report: dict | None = None) -> dict:
     session = session_feedback_stats.get(session_id) or {}
     frames = max(int(session.get("frames", 0)), 1)
     good_frames = int(session.get("good_frames", 0))
     mistakes = session.get("mistakes", {})
+    weighted_mistakes = session.get("mistake_weighted", {})
     good_ratio = good_frames / frames
-    top_mistakes = sorted(mistakes.items(), key=lambda item: item[1], reverse=True)[:3]
+    frame_quality = max(0.0, min(1.0, (0.72 * good_ratio) + (0.28 * (1.0 - min(1.0, float(session.get("severity_sum", 0.0)) / (frames * 2.5))))))
+    top_mistakes = sorted(
+        mistakes.items(),
+        key=lambda item: (weighted_mistakes.get(item[0], 0.0), item[1]),
+        reverse=True,
+    )[:3]
     common_mistakes = [code for code, _ in top_mistakes]
     perfect_reps = int(session.get("perfect_reps", 0))
     corrected_reps = int(session.get("corrected_reps", 0))
+    poor_reps = int(session.get("poor_reps", 0))
     rep_reports = list(session.get("rep_reports", []))
+    rep_quality_scores = [int(rep.get("quality_score", 0)) for rep in rep_reports]
+    average_rep_quality = round(sum(rep_quality_scores) / len(rep_quality_scores)) if rep_quality_scores else round(frame_quality * 100)
+    consistency_score = 0
+    if rep_quality_scores:
+        spread = max(rep_quality_scores) - min(rep_quality_scores)
+        consistency_score = max(0, round(average_rep_quality - min(spread, 30) * 0.7))
+    overall_accuracy = round((average_rep_quality * 0.75) + (frame_quality * 100 * 0.25)) if rep_reports else round(frame_quality * 100)
     what_went_right = []
-    if good_ratio >= 0.8:
+    if frame_quality >= 0.8:
         what_went_right.append("You stayed controlled through most of the set.")
     if perfect_reps > 0:
         what_went_right.append(f"{perfect_reps} reps were clean and well controlled.")
     if reps >= 8:
         what_went_right.append("You built enough consistency to finish a meaningful working set.")
+    if consistency_score >= 80:
+        what_went_right.append("Your rep quality stayed fairly consistent from start to finish.")
 
     improvement_map = {
         "elbow_instability": "Keep the elbows steadier and let the target joint lead the motion.",
@@ -499,24 +688,46 @@ def session_summary_payload(session_id: str, exercise_name: str, reps: int) -> d
         "knee_instability": "Track both knees more evenly and keep pressure balanced.",
         "arm_imbalance": "Match left and right sides more closely throughout the rep.",
         "overfolding": "Keep the torso position more stable and avoid collapsing forward.",
+        "too_high": "Stop the raise around shoulder height instead of drifting higher.",
+        "too_deep": "Stay in a strong range and avoid dropping deeper than you can control.",
+        "overflexion": "Ease off the top slightly so the joint stays stacked and controlled.",
     }
     what_went_wrong = [improvement_map.get(code, code.replace("_", " ")) for code, _ in top_mistakes]
+    if poor_reps > 0:
+        what_went_wrong.append(f"{poor_reps} reps had larger form breakdowns and need extra attention.")
+    if consistency_score and consistency_score < 70:
+        what_went_wrong.append("Your rep quality moved around too much from one rep to the next.")
     report = llm_coach.exercise_report(
         exercise_name=exercise_name,
         reps=reps,
-        good_frame_ratio=good_ratio,
+        good_frame_ratio=frame_quality,
         top_mistakes=top_mistakes,
+        perfect_reps=perfect_reps,
+        corrected_reps=corrected_reps,
+        poor_reps=poor_reps,
+        average_rep_quality=average_rep_quality,
+        consistency_score=consistency_score,
+        rep_reports=rep_reports,
+        previous_report=previous_report,
     )
+    progress_comparison = report.get("progress_since_last") if isinstance(report, dict) else None
+    still_to_improve = report.get("still_to_improve") if isinstance(report, dict) else None
     return {
         "exercise": exercise_name,
         "reps": reps,
-        "accuracy": round(good_ratio * 100),
+        "accuracy": overall_accuracy,
         "perfect_reps": perfect_reps,
         "corrected_reps": corrected_reps,
+        "poor_reps": poor_reps,
+        "average_rep_quality": average_rep_quality,
+        "consistency_score": consistency_score,
         "common_mistakes": common_mistakes,
         "what_went_right": what_went_right,
         "what_went_wrong": what_went_wrong,
         "rep_breakdown": rep_reports,
+        "previous_report": previous_report,
+        "progress_since_last": progress_comparison,
+        "still_to_improve": still_to_improve,
         "report": report,
     }
 
@@ -565,8 +776,13 @@ def get_nutrition_profile(user_id: int, db: Session = Depends(database.get_db)):
             "sex": "unspecified",
             "height_cm": None,
             "weight_kg": None,
+            "target_weight_kg": None,
+            "body_fat_percent": None,
             "activity_level": "moderate",
             "goal_type": "maintain",
+            "dietary_preference": "balanced",
+            "meals_per_day": 3,
+            "allergies": "",
             **defaults,
         }
 
@@ -576,8 +792,13 @@ def get_nutrition_profile(user_id: int, db: Session = Depends(database.get_db)):
         "sex": profile.sex,
         "height_cm": profile.height_cm,
         "weight_kg": profile.weight_kg,
+        "target_weight_kg": profile.target_weight_kg,
+        "body_fat_percent": profile.body_fat_percent,
         "activity_level": profile.activity_level,
         "goal_type": profile.goal_type,
+        "dietary_preference": profile.dietary_preference,
+        "meals_per_day": profile.meals_per_day,
+        "allergies": profile.allergies,
         "target_calories": profile.target_calories,
         "target_protein": profile.target_protein,
         "target_carbs": profile.target_carbs,
@@ -609,8 +830,13 @@ def upsert_nutrition_profile(payload: NutritionProfileSchema, db: Session = Depe
             sex=payload.sex,
             height_cm=payload.height_cm,
             weight_kg=payload.weight_kg,
+            target_weight_kg=payload.target_weight_kg,
+            body_fat_percent=payload.body_fat_percent,
             activity_level=payload.activity_level,
             goal_type=payload.goal_type,
+            dietary_preference=payload.dietary_preference,
+            meals_per_day=payload.meals_per_day,
+            allergies=payload.allergies,
             updated_at=now,
             **targets,
         )
@@ -620,8 +846,13 @@ def upsert_nutrition_profile(payload: NutritionProfileSchema, db: Session = Depe
         profile.sex = payload.sex
         profile.height_cm = payload.height_cm
         profile.weight_kg = payload.weight_kg
+        profile.target_weight_kg = payload.target_weight_kg
+        profile.body_fat_percent = payload.body_fat_percent
         profile.activity_level = payload.activity_level
         profile.goal_type = payload.goal_type
+        profile.dietary_preference = payload.dietary_preference
+        profile.meals_per_day = max(1, payload.meals_per_day)
+        profile.allergies = payload.allergies
         profile.target_calories = targets["target_calories"]
         profile.target_protein = targets["target_protein"]
         profile.target_carbs = targets["target_carbs"]
@@ -637,8 +868,13 @@ def upsert_nutrition_profile(payload: NutritionProfileSchema, db: Session = Depe
             "sex": profile.sex,
             "height_cm": profile.height_cm,
             "weight_kg": profile.weight_kg,
+            "target_weight_kg": profile.target_weight_kg,
+            "body_fat_percent": profile.body_fat_percent,
             "activity_level": profile.activity_level,
             "goal_type": profile.goal_type,
+            "dietary_preference": profile.dietary_preference,
+            "meals_per_day": profile.meals_per_day,
+            "allergies": profile.allergies,
             "target_calories": profile.target_calories,
             "target_protein": profile.target_protein,
             "target_carbs": profile.target_carbs,
@@ -765,7 +1001,9 @@ def nutrition_day(user_id: int, date_key: str | None = None, db: Session = Depen
         f"Remaining calories: {remaining['calories']}\n"
         f"Remaining protein: {remaining['protein']}\n"
         f"Remaining carbs: {remaining['carbs']}\n"
-        f"Remaining fat: {remaining['fat']}"
+        f"Remaining fat: {remaining['fat']}\n"
+        f"{profile_context(profile)}\n"
+        "Suggest a practical next meal that fits the remaining target."
     )
     suggestion = llm_coach.meal_estimate(prompt_context=suggestion_context, image_base64=None)
 
@@ -799,6 +1037,9 @@ def create_meal_entry(payload: MealEntrySchema, db: Session = Depends(database.g
         image_data=payload.image_data,
         recipe_id=payload.recipe_id,
         consumed_at_label=payload.consumed_at_label,
+        confidence_score=payload.confidence_score,
+        portion_basis=payload.portion_basis,
+        recognized_items="||".join(payload.recognized_items or []),
         created_at=now,
         updated_at=now,
     )
@@ -828,6 +1069,9 @@ def update_meal_entry(meal_id: int, payload: MealEntrySchema, db: Session = Depe
     entry.image_data = payload.image_data
     entry.recipe_id = payload.recipe_id
     entry.consumed_at_label = payload.consumed_at_label
+    entry.confidence_score = payload.confidence_score
+    entry.portion_basis = payload.portion_basis
+    entry.recognized_items = "||".join(payload.recognized_items or [])
     entry.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(entry)
@@ -852,13 +1096,25 @@ def scan_meal(payload: MealScanSchema, db: Session = Depends(database.get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    profile = db.query(models.NutritionProfile).filter(models.NutritionProfile.user_id == payload.user_id).first()
     image_b64 = clean_image_payload(payload.image)
+    label_image_b64 = clean_image_payload(payload.nutrition_label_image)
+    image_for_estimate = label_image_b64 or image_b64
+    portion_hint = f"Portion count: {payload.portion_count}" if payload.portion_count else "Portion count: unknown"
+    packaging_hint = payload.packaging_hint or "unknown"
     context = (
-        "Estimate nutrition for the uploaded meal image. "
+        "Estimate nutrition for the uploaded meal image as accurately as possible from a phone photo. "
+        "Prefer visible portion size, obvious ingredients, and any label hint provided. "
+        "Do not hallucinate exotic ingredients. Use common serving sizes when uncertain.\n"
         f"Meal hint: {payload.meal_hint or 'No hint provided'}\n"
-        f"Meal type: {payload.meal_type}"
+        f"Meal type: {payload.meal_type}\n"
+        f"Serving hint: {payload.serving_hint or 'No serving hint'}\n"
+        f"Packaging hint: {packaging_hint}\n"
+        f"Eaten out: {'yes' if payload.eaten_out else 'no'}\n"
+        f"{portion_hint}\n"
+        f"{profile_context(profile)}"
     )
-    estimate = llm_coach.meal_estimate(prompt_context=context, image_base64=image_b64)
+    estimate = llm_coach.meal_estimate(prompt_context=context, image_base64=image_for_estimate)
     meal = None
     if payload.add_to_day:
         now = datetime.utcnow()
@@ -875,6 +1131,9 @@ def scan_meal(payload: MealScanSchema, db: Session = Depends(database.get_db)):
             fat=max(0, estimate["fat"]),
             image_data=payload.image,
             consumed_at_label=payload.consumed_at_label,
+            confidence_score=float(estimate.get("confidence", 0.0)),
+            portion_basis=estimate.get("portion_basis", ""),
+            recognized_items="||".join(estimate.get("recognized_items", [])),
             created_at=now,
             updated_at=now,
         )
@@ -1102,6 +1361,7 @@ def day_progress(user_id: int, plan_id: str, day_id: str, db: Session = Depends(
 
 @app.post("/ai/analyze-frame")
 def analyze_frame(payload: AnalyzeFrameSchema):
+    started_at = time.perf_counter()
     exercise_key = normalize_exercise(payload.exercise)
     if exercise_key not in EXERCISE_CONFIGS:
         exercise_key = "bicep_curl"
@@ -1178,19 +1438,55 @@ def analyze_frame(payload: AnalyzeFrameSchema):
         "tracked_angle_definition": tracked_angle_meta(exercise)["definition"],
         "accuracy": accuracy,
         "common_mistake": common_mistake,
+        "processing_ms": round((time.perf_counter() - started_at) * 1000, 1),
         "ready": True,
     }
 
 
 @app.post("/ai/session-report")
-def session_report(payload: SessionReportSchema):
+def session_report(payload: SessionReportSchema, db: Session = Depends(database.get_db)):
     exercise_key = normalize_exercise(payload.exercise)
     if exercise_key not in EXERCISE_CONFIGS:
         exercise_key = "bicep_curl"
 
     counter = session_counters.get(payload.session_id)
     reps = counter.counter if counter else 0
-    return session_summary_payload(payload.session_id, exercise_key, reps)
+    previous_report = None
+    if payload.user_id:
+        previous_row = (
+            db.query(models.ExerciseSessionReport)
+            .filter(
+                models.ExerciseSessionReport.user_id == payload.user_id,
+                models.ExerciseSessionReport.exercise_name == exercise_key,
+            )
+            .order_by(models.ExerciseSessionReport.created_at.desc())
+            .first()
+        )
+        previous_report = serialize_previous_report(previous_row)
+
+    summary = session_summary_payload(payload.session_id, exercise_key, reps, previous_report=previous_report)
+
+    if payload.user_id:
+        saved_report = models.ExerciseSessionReport(
+            user_id=payload.user_id,
+            plan_id=payload.plan_id,
+            day_id=payload.day_id,
+            exercise_id=payload.exercise_id,
+            exercise_name=exercise_key,
+            reps=int(summary.get("reps", 0)),
+            accuracy=int(summary.get("accuracy", 0)),
+            perfect_reps=int(summary.get("perfect_reps", 0)),
+            corrected_reps=int(summary.get("corrected_reps", 0)),
+            poor_reps=int(summary.get("poor_reps", 0)),
+            average_rep_quality=int(summary.get("average_rep_quality", 0)),
+            consistency_score=int(summary.get("consistency_score", 0)),
+            common_mistakes="||".join(summary.get("common_mistakes", [])),
+            report_json=json.dumps(summary.get("report", {})),
+        )
+        db.add(saved_report)
+        db.commit()
+
+    return summary
 
 # 7. Run server dynamically
 if __name__ == "__main__":

@@ -1,0 +1,50 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: formfix-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=sqlite:///./data/formfix.db
+      - LLM_PROVIDER=local
+    volumes:
+      # Persist user progress, workouts, and SQLite database
+      - formfix_data:/app/green-formfix/backend/data
+      # Mount models folder so all existing .keras models remain directly accessible
+      - ./models:/app/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - formfix-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: "http://localhost:8000"
+    container_name: formfix-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - formfix-network
+
+volumes:
+  formfix_data:
+    driver: local
+
+networks:
+  formfix-network:
+    driver: bridge

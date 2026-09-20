@@ -1,0 +1,394 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{ragged2e}
+\usepackage{multicol}
+
+\title{FormFix-AI}
+\subtitle{MULTI-MODEL AI REAL TIME GYM POSE DETECTION AND CORRECTION USING LSTM, BiLSTM and TRANSFORMER}
+\institute{Department of CSE, UVCE \\ Mini Project Presentation \\ Submitted to: Dr. Champa H N}
+\author{Syed Ahmed (U25UV23T029111),Vibha V Muradi (U25UV23T029122) }
+\institute{Mini Project Presentation}
+\date{\today}
+
+\newcommand{\archfig}{/Users/syedahmed/Documents/Screenshot 2026-04-12 at 3.05.49 PM.png}
+\newcommand{\bilstmfig}{/Users/syedahmed/Downloads/Bidirectional LSTM-2026-04-12-094513.png}
+\newcommand{\lstmfig}{/Users/syedahmed/Downloads/Bidirectional LSTM-2026-04-12-101325.png}
+\newcommand{\transformerfig}{/Users/syedahmed/Downloads/Bidirectional LSTM-2026-04-12-101602.png}
+\newcommand{\accfig}{/Users/syedahmed/AI-Trainer/reports/analytics/accuracy_vs_epoch.png}
+\newcommand{\lossfig}{/Users/syedahmed/AI-Trainer/reports/analytics/loss_vs_epoch.png}
+\newcommand{\cmfig}{/Users/syedahmed/AI-Trainer/reports/analytics/confusion_matrix.png}
+\newcommand{\lstmtrainlog}{/Users/syedahmed/Documents/Screenshot 2026-04-13 at 12.29.23 AM.png}
+\newcommand{\transformertrainlog}{/Users/syedahmed/Documents/Screenshot 2026-04-13 at 12.26.58 AM.png}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Problem Statement}
+\justifying
+Many users perform workouts without supervision, which leads to poor exercise form, wrong repetition counting, low training quality, and injury risk. Existing systems usually solve only one piece of the problem, such as pose detection or action recognition, but do not combine recognition, repetition counting, posture correction, reporting, and user progress tracking into one deployable product.
+
+\vspace{0.3cm}
+\textbf{Project goal}
+\begin{itemize}
+  \item detect the exercise being performed,
+  \item count reps accurately,
+  \item check posture in real time,
+  \item generate voice and text feedback,
+  \item save progress and end-of-exercise summaries.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{What Was Implemented from Research Papers}
+\small
+\begin{itemize}
+  \item From MediaPipe/OpenPose papers: real-time body landmark extraction.
+  \item From temporal learning papers: LSTM, BiLSTM, and Transformer sequence classification.
+  \item From posture correction papers: joint-angle based biomechanical rules.
+  \item From feedback-oriented papers: immediate guidance during workout performance.
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{What is added beyond the papers}
+\begin{itemize}
+  \item exercise-wise rep counting,
+  \item friendly coach-style correction,
+  \item live web camera interface,
+  \item database-backed user progress tracking,
+  \item session reports with perfect reps, corrected reps, and common mistakes.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Research Paper Comparison}
+\small
+\begin{tabular}{p{3.2cm} p{4.5cm} p{2.2cm} p{3.3cm}}
+\toprule
+\textbf{Paper} & \textbf{Core idea} & \textbf{Real-time} & \textbf{Reported accuracy} \\
+\midrule
+Khadtare et al. (IJECE 2025) & MediaPipe + angle-based posture correction & Yes & Not clearly stated in extracted section \\
+\addlinespace
+Gadhvi et al. (PosePilot) & LSTM/BiLSTM + attention for posture recognition/correction & Yes & 97.52\% \\
+\addlinespace
+Appiah (VISAPP 2024) & mobile-phone pose estimation for gym correction & Near real-time & values in 90--97\% range appear in extracted section \\
+\addlinespace
+Kanase et al. (ICACC 2021) & OpenPose + vector geometry correction & Yes & no single final accuracy clearly stated \\
+\addlinespace
+Suryawanshi et al. (IJRSI 2025) & OpenCV + MediaPipe + real-time corrective feedback & Yes & multiple percentages extracted; exact headline metric should be confirmed from full paper \\
+\addlinespace
+IJSRET 2025 & human pose correction with similarity-based guidance & Yes & no explicit final accuracy extracted \\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+\begin{frame}{Dataset Used}
+\small
+\justifying
+The project is trained on processed pose-sequence data. Each training sample is a \textbf{30-frame sequence}, and each frame contains \textbf{132 features} derived from detected body landmarks.
+
+\vspace{0.2cm}
+\textbf{Processed dataset summary}
+\begin{itemize}
+  \item total sequences: \textbf{1140}
+  \item sequence shape: \textbf{\((1140, 30, 132)\)}
+  \item classes: \textbf{6}
+\end{itemize}
+
+\textbf{Class distribution}
+\begin{itemize}
+  \item barbell\_squat: 152
+  \item bicep\_curl: 225
+  \item hammer\_curl: 78
+  \item lateral\_raise: 170
+  \item pull\_up: 212
+  \item push\_up: 303
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Video Count vs Sequence Count}
+\justifying
+The model is trained on pose sequences, not directly on raw videos. One exercise video can generate multiple valid 30-frame windows, so the number of processed sequences is usually greater than the number of source videos.
+
+\vspace{0.2cm}
+\textbf{Example}
+\begin{itemize}
+  \item hammer\_curl videos added by user: 19
+  \item processed hammer\_curl sequences in dataset: 78
+\end{itemize}
+
+\vspace{0.2cm}
+This is expected because one video may produce several usable training windows after preprocessing.
+\end{frame}
+
+\begin{frame}{End-to-End Architecture}
+\centering
+\includegraphics[width=0.83\linewidth,height=0.78\textheight,keepaspectratio]{\archfig}
+\end{frame}
+
+\begin{frame}{Preprocessing, Training and Evaluation Pipeline}
+\small
+\textbf{Preprocessing}
+\begin{enumerate}
+  \item collect exercise videos,
+  \item extract pose landmarks using MediaPipe,
+  \item flatten frame-wise landmark features,
+  \item create 30-frame windows,
+  \item store processed dataset in \texttt{exercise\_sequences.npz}.
+\end{enumerate}
+
+\textbf{Training}
+\begin{enumerate}
+  \item split data using stratified train/validation partition,
+  \item compute class weights,
+  \item train LSTM, BiLSTM, and Transformer,
+  \item save models in \texttt{models/}.
+\end{enumerate}
+
+\textbf{Evaluation}
+\begin{enumerate}
+  \item load trained model,
+  \item predict all sequences,
+  \item compute Top-1, Top-3, precision, recall, F1-score, and confusion matrix.
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Joint Angles Used for Rep Counting and Correction}
+\small
+\begin{itemize}
+  \item Elbow angle = shoulder--elbow--wrist
+  \item Knee angle = hip--knee--ankle
+  \item Hip angle = shoulder--hip--knee
+  \item Shoulder angle = elbow--shoulder--hip
+\end{itemize}
+
+\vspace{0.2cm}
+\[
+\theta=\cos^{-1}\left(\frac{(A-B)\cdot(C-B)}{\|A-B\|\|C-B\|}\right)
+\]
+
+\vspace{0.2cm}
+These angles are reused by:
+\begin{itemize}
+  \item rep counter,
+  \item posture correction engine,
+  \item report generator.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Baseline LSTM Architecture}
+\centering
+\includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{\lstmfig}
+
+\vspace{0.2cm}
+\small
+\textbf{Function:} baseline temporal classifier. \\
+\textbf{Why used:} simple and fast sequence-learning baseline for comparison.
+\end{frame}
+
+\begin{frame}{BiLSTM Architecture}
+\centering
+\includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{\bilstmfig}
+
+\vspace{0.2cm}
+\small
+\textbf{Function:} main bidirectional temporal classifier. \\
+\textbf{Why used:} captures motion context from both directions and improves exercise understanding.
+\end{frame}
+
+\begin{frame}{Transformer Architecture}
+\centering
+\includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{\transformerfig}
+
+\vspace{0.2cm}
+\small
+\textbf{Function:} attention-based sequence model. \\
+\textbf{Why used:} captures long-range frame relationships and acts as an advanced comparison model.
+\end{frame}
+
+\begin{frame}{How the Three Models Are Used}
+\small
+\begin{itemize}
+  \item LSTM, BiLSTM, and Transformer are trained on the same processed dataset.
+  \item They are compared independently to identify the strongest architecture.
+  \item The live system also supports hybrid inference:
+  \begin{itemize}
+    \item fast mode favors LSTM,
+    \item best mode favors BiLSTM,
+    \item hybrid mode fuses all three with BiLSTM weight highest,
+    \item ensemble mode runs all models together.
+  \end{itemize}
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{Reason}
+\begin{itemize}
+  \item LSTM gives speed,
+  \item BiLSTM gives strong temporal context,
+  \item Transformer gives a high-capacity comparison model.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Training Log Snapshot: LSTM / BiLSTM}
+\centering
+\includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{\lstmtrainlog}
+\end{frame}
+
+\begin{frame}{Training Log Snapshot: Transformer}
+\centering
+\includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{\transformertrainlog}
+\end{frame}
+
+\begin{frame}{Training vs Validation Accuracy}
+\centering
+\includegraphics[width=0.88\linewidth,height=0.78\textheight,keepaspectratio]{\accfig}
+\end{frame}
+
+\begin{frame}{Training vs Validation Loss}
+\centering
+\includegraphics[width=0.88\linewidth,height=0.78\textheight,keepaspectratio]{\lossfig}
+\end{frame}
+
+\begin{frame}{Confusion Matrix}
+\centering
+\includegraphics[width=0.76\linewidth,height=0.76\textheight,keepaspectratio]{\cmfig}
+\end{frame}
+
+\begin{frame}{How Accuracy is Calculated}
+\small
+\textbf{Top-1 Accuracy}
+\[
+\text{Top-1}=\frac{\text{Correct highest-confidence predictions}}{\text{Total predictions}}\times 100
+\]
+
+\textbf{Top-3 Accuracy}
+\[
+\text{Top-3}=\frac{\text{True class inside top 3 predictions}}{\text{Total predictions}}\times 100
+\]
+
+\textbf{Precision, Recall, F1}
+\[
+\text{Precision}=\frac{TP}{TP+FP},
+\quad
+\text{Recall}=\frac{TP}{TP+FN},
+\quad
+\text{F1}=2\cdot\frac{PR}{P+R}
+\]
+\end{frame}
+
+\begin{frame}{Current BiLSTM Analytics}
+\small
+\textbf{From \texttt{metrics\_summary.json}}
+\begin{itemize}
+  \item Top-1 Accuracy: \textbf{93.72\%}
+  \item Top-3 Accuracy: \textbf{99.82\%}
+  \item Weighted F1-score: \textbf{93.64\%}
+  \item Macro F1-score: \textbf{91.69\%}
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{From \texttt{bilstm\_history.json}}
+\begin{itemize}
+  \item training accuracy rises from \(\approx 47\%\) to \(\approx 94.7\%\)
+  \item validation accuracy peaks around \textbf{89.69\%}
+  \item late-epoch spikes in validation loss indicate overfitting risk
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Three-Model Accuracy Comparison}
+\small
+\begin{tabular}{p{3.4cm} c c p{4.2cm}}
+\toprule
+\textbf{Model} & \textbf{Top-1} & \textbf{Top-3} & \textbf{Comment} \\
+\midrule
+LSTM & 84.30\% & 98.95\% & stable baseline and faster model \\
+BiLSTM (analytics export) & 93.72\% & 99.82\% & strong balance of accuracy and temporal learning \\
+Transformer & 97.89\% & 99.65\% & strongest current evaluation result \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.2cm}
+\textbf{Important note}
+\begin{itemize}
+  \item Transformer is strongest in the current evaluation run.
+  \item For strict academic reporting, it should still be verified on a fully unseen holdout split before making the final deployment claim.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{BiLSTM Class-wise Performance}
+\small
+\begin{tabular}{p{2.8cm} c c c}
+\toprule
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-score} \\
+\midrule
+barbell\_squat & 0.908 & 0.974 & 0.940 \\
+bicep\_curl & 0.916 & 0.820 & 0.865 \\
+hammer\_curl & 0.808 & 0.808 & 0.808 \\
+lateral\_raise & 0.896 & 0.912 & 0.904 \\
+pull\_up & 0.977 & 1.000 & 0.988 \\
+push\_up & 0.993 & 1.000 & 0.997 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.2cm}
+\textbf{Interpretation}
+\begin{itemize}
+  \item strongest classes are push\_up and pull\_up,
+  \item squat is strong,
+  \item the most difficult class pair remains bicep\_curl vs hammer\_curl.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{How This Project Improves on the Papers}
+\small
+\begin{itemize}
+  \item Many papers stop at posture detection or recognition only.
+  \item This project combines:
+  \begin{itemize}
+    \item exercise recognition,
+    \item repetition counting,
+    \item posture correction,
+    \item live voice feedback,
+    \item website deployment,
+    \item SQL-based progress tracking,
+    \item end-of-exercise reports.
+  \end{itemize}
+  \item So the project is more complete as an end-to-end application, not only a model experiment.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Future Improvements}
+\begin{itemize}
+  \item add more balanced curl and squat videos,
+  \item create a strict train/validation/test benchmark split,
+  \item increase exercise coverage,
+  \item add per-user calibration,
+  \item improve exercise-quality scoring for each rep,
+  \item optimize browser-side speed further for smoother live inference.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Conclusion}
+\justifying
+FormFix AI is a real-time AI workout assistant that combines pose estimation, temporal sequence modeling, rep counting, posture correction, web deployment, and user progress tracking.
+
+\vspace{0.3cm}
+The project uses LSTM, BiLSTM, and Transformer models for exercise classification, and complements them with exercise-specific angle logic for rep counting and corrective feedback. The current analytics show strong performance, especially for push-up, pull-up, and squat classes.
+
+\vspace{0.3cm}
+The system can be further improved through better dataset balance, stricter benchmarking, and expansion to more exercises, but it already demonstrates a practical AI fitness trainer built from research ideas and deployed as a usable application.
+\end{frame}
+
+\begin{frame}
+  \centering
+  \Huge Thank You
+\end{frame}
+
+\end{document}

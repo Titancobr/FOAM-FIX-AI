@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from tensorflow import keras
 
-from models.transformer_model import TransformerBlock
+from models.transformer_model import PositionalEncoding, TransformerBlock
 
 
 class LiveExercisePredictor:
@@ -27,10 +27,12 @@ class LiveExercisePredictor:
         self.sequence_length = int(dataset["X"].shape[1])
         self.feature_dim = int(dataset["X"].shape[2])
 
-        custom_objects = {}
-        if "transformer" in self.model_path.stem:
-            custom_objects["TransformerBlock"] = TransformerBlock
+        custom_objects = {
+            "TransformerBlock": TransformerBlock,
+            "PositionalEncoding": PositionalEncoding,
+        }
         self.model = keras.models.load_model(self.model_path, custom_objects=custom_objects)
+
         self.sequence_buffer = []
         self.ema_probs = None
         self.current_label = None
@@ -42,10 +44,40 @@ class LiveExercisePredictor:
         self.latest_probs = None
 
     def _flatten_landmarks(self, landmarks):
+        if len(landmarks) < 33:
+            flattened = []
+            for landmark in landmarks:
+                flattened.extend(landmark[:4])
+            return flattened
+
+        l_hip = landmarks[23]
+        r_hip = landmarks[24]
+        hip_center_x = (l_hip[0] + r_hip[0]) / 2.0
+        hip_center_y = (l_hip[1] + r_hip[1]) / 2.0
+        hip_center_z = (l_hip[2] + r_hip[2]) / 2.0
+
+        l_sh = landmarks[11]
+        r_sh = landmarks[12]
+        sh_center_x = (l_sh[0] + r_sh[0]) / 2.0
+        sh_center_y = (l_sh[1] + r_sh[1]) / 2.0
+        sh_center_z = (l_sh[2] + r_sh[2]) / 2.0
+
+        torso_size = np.sqrt(
+            (sh_center_x - hip_center_x) ** 2
+            + (sh_center_y - hip_center_y) ** 2
+            + (sh_center_z - hip_center_z) ** 2
+        )
+        scale = torso_size if torso_size > 1e-4 else 1.0
+
         flattened = []
         for landmark in landmarks:
-            flattened.extend(landmark[:4])
+            norm_x = (landmark[0] - hip_center_x) / scale
+            norm_y = (landmark[1] - hip_center_y) / scale
+            norm_z = (landmark[2] - hip_center_z) / scale
+            visibility = landmark[3] if len(landmark) > 3 else 1.0
+            flattened.extend([norm_x, norm_y, norm_z, visibility])
         return flattened
+
 
     def _build_prediction(self, smoothed_probs, raw_probs):
         self.latest_probs = np.asarray(smoothed_probs, dtype=np.float32)

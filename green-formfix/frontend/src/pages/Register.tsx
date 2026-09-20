@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import heroImg from "@/assets/hero-fitness.jpg";
 import axios from "axios";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const Register = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +31,7 @@ const Register = () => {
     setIsLoading(true);
     
     try {
-      const response = await axios.post("http://127.0.0.1:8000/register", {
+      const response = await axios.post(`${API_URL}/register`, {
         email: email,
         password: password,
       });

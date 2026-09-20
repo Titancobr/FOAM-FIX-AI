@@ -1,0 +1,39 @@
+# Stage 1: Build Vite React application
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package manifests
+COPY green-formfix/frontend/package*.json ./
+
+# Install dependencies cleanly
+RUN npm ci
+
+# Copy full frontend source code
+COPY green-formfix/frontend/ ./
+
+# Pass VITE_API_URL default at build time (can be empty string so requests use same-origin proxy, or default http://localhost:8000)
+ARG VITE_API_URL=""
+ENV VITE_API_URL=$VITE_API_URL
+
+# Build production bundle
+RUN npm run build
+
+# Stage 2: Serve via Nginx
+FROM nginx:alpine
+
+# Copy built static files from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy custom nginx configuration with reverse proxy support
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Install curl for container healthcheck
+RUN apk add --no-cache curl
+
+EXPOSE 80
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
