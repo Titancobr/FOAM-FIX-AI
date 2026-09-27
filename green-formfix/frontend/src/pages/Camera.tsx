@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCamera } from "@/hooks/useCamera";
-import { pushPullLegPlan, highVolumeSplitPlan } from "@/data/workoutData";
+import { useWorkoutPlan } from "@/lib/workoutPlans";
 import { Button } from "@/components/ui/button";
 
 type Landmark = {
@@ -92,7 +92,7 @@ const Camera = () => {
   const dayId = searchParams.get("day") || "";
   const exerciseId = searchParams.get("ex") || "";
 
-  const plan = planId === "ppl" ? pushPullLegPlan : highVolumeSplitPlan;
+  const { plan, loading: planLoading } = useWorkoutPlan(planId);
   const day = plan?.days.find((d) => d.id === dayId);
   const selectedExercise =
     day?.exercises.find((exercise) => exercise.id === exerciseId) || day?.exercises[0];
@@ -315,6 +315,7 @@ const Camera = () => {
     };
   }, []);
 
+  if (planLoading) return <div className="p-10 text-center text-muted-foreground">Loading your workout…</div>;
   if (!day || !selectedExercise) {
     return <div className="p-10 text-center">Workout not found.</div>;
   }
@@ -323,7 +324,7 @@ const Camera = () => {
     const totalExercises = day?.exercises.length || 0;
     if (fitUser?.user_id) {
       try {
-        await fetch(`${API_URL}/progress/exercise`, {
+        const response = await fetch(`${API_URL}/progress/exercise`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -339,6 +340,12 @@ const Camera = () => {
             total_exercises: totalExercises,
           }),
         });
+        if (response.ok && status === "completed") {
+          const data = await response.json();
+          if (data.xp_earned > 0 || data.new_badges?.length) {
+            localStorage.setItem("lastFitnessReward", JSON.stringify(data));
+          }
+        }
       } catch {
         // UI still continues even if progress sync fails.
       }

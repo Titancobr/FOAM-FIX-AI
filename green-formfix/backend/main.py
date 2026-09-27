@@ -26,9 +26,13 @@ if str(AI_TRAINER_ROOT) not in sys.path:
 from core.rep_counter import RepCounter
 from utils.config import EXERCISE_CONFIGS
 from llm_coach import LLMCoach
+from community import router as community_router, record_completed_workout
+from workout_plans import router as workout_plans_router
 
 # 1. Initialize the app
 app = FastAPI()
+app.include_router(community_router)
+app.include_router(workout_plans_router)
 
 # 2. CORS setup
 app.add_middleware(
@@ -63,6 +67,26 @@ try:
         print("Connected to SQL database successfully!")
     models.Base.metadata.create_all(bind=database.engine)
     inspector = inspect(database.engine)
+    if inspector.has_table("users"):
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "username" not in user_columns:
+            with database.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN username VARCHAR(40)"))
+        with database.engine.begin() as conn:
+            rows = conn.execute(text("SELECT id, email FROM users WHERE username IS NULL")).fetchall()
+            used = {row[0] for row in conn.execute(text("SELECT username FROM users WHERE username IS NOT NULL")).fetchall()}
+            for user_id, email in rows:
+                base = (email.split("@", 1)[0] if email else f"athlete{user_id}").lower()[:32]
+                candidate = base
+                suffix = 2
+                while candidate in used:
+                    candidate = f"{base[:28]}{suffix}"
+                    suffix += 1
+                conn.execute(text("UPDATE users SET username = :username WHERE id = :user_id"), {"username": candidate, "user_id": user_id})
+                used.add(candidate)
+        if "ix_users_username" not in {index["name"] for index in inspect(database.engine).get_indexes("users")}:
+            with database.engine.begin() as conn:
+                conn.execute(text("CREATE UNIQUE INDEX ix_users_username ON users (username)"))
     if inspector.has_table("nutrition_profiles"):
         nutrition_columns = {column["name"] for column in inspector.get_columns("nutrition_profiles")}
         nutrition_alters = {
@@ -737,8 +761,15 @@ def register_user(user_data: UserSchema, db: Session = Depends(database.get_db))
     existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already exists!")
+    base_username = user_data.email.split("@")[0].lower()[:32]
+    candidate = base_username
+    suffix = 2
+    while db.query(models.User).filter(models.User.username == candidate).first():
+        candidate = f"{base_username[:28]}{suffix}"
+        suffix += 1
     new_user = models.User(
         email=user_data.email,
+        username=candidate,
         hashed_password=auth.hash_password(user_data.password)
     )
     db.add(new_user)
@@ -751,7 +782,7 @@ def login_user(user_data: UserSchema, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.email == user_data.email).first()
     if not user or not auth.verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    return {"message": "Login successful!", "user_id": user.id, "email": user.email}
+    return {"message": "Login successful!", "user_id": user.id, "email": user.email, "username": user.username or user.email.split("@")[0]}
 
 
 @app.get("/nutrition/profile/{user_id}")
@@ -1249,6 +1280,9 @@ def upsert_exercise_progress(payload: WorkoutExerciseUpdateSchema, db: Session =
         )
         db.add(day_progress)
 
+    # Sessions run with autoflush=False, so pending rows must hit the DB before counting.
+    db.flush()
+
     completed_count = (
         db.query(models.WorkoutExerciseStatus)
         .filter(
@@ -1282,9 +1316,12 @@ def upsert_exercise_progress(payload: WorkoutExerciseUpdateSchema, db: Session =
         day_progress.status = "in_progress"
         day_progress.completed_at = None
 
+    reward = record_completed_workout(db, payload.user_id, payload.plan_id, payload.day_id, day_progress.day_name) if day_progress.status == "completed" else {"xp_earned": 0, "new_badges": []}
     db.commit()
     return {
         "message": "Progress updated",
+        "xp_earned": reward["xp_earned"],
+        "new_badges": reward["new_badges"],
         "day_status": day_progress.status,
         "exercise_status": status,
         "completed_exercises": day_progress.completed_exercises,

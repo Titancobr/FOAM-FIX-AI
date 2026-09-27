@@ -13,7 +13,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { pushPullLegPlan, highVolumeSplitPlan } from "@/data/workoutData";
+import { useWorkoutPlan } from "@/lib/workoutPlans";
 import { Button } from "@/components/ui/button";
 import BottomNav from "@/components/BottomNav";
 import { useToast } from "@/hooks/use-toast";
@@ -62,8 +62,7 @@ const DayExercises = () => {
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [latestReport, setLatestReport] = useState<ExerciseReport | null>(null);
 
-  // Match plan data based on ID
-  const plan = planId === "ppl" ? pushPullLegPlan : highVolumeSplitPlan;
+  const { plan, loading: planLoading } = useWorkoutPlan(planId);
   const day = plan?.days.find((d) => d.id === dayId);
 
   useEffect(() => {
@@ -83,9 +82,15 @@ const DayExercises = () => {
       } catch {
         // Ignore malformed local report data.
       }
+      let reward: { xp_earned?: number; new_badges?: string[]; level_before?: number; level_after?: number } | null = null;
+      try {
+        const savedReward = localStorage.getItem("lastFitnessReward");
+        if (savedReward) { reward = JSON.parse(savedReward); localStorage.removeItem("lastFitnessReward"); }
+      } catch { /* Ignore malformed reward data. */ }
+      const newBadges = reward?.new_badges || [];
       toast({
-        title: "EXERCISE STRUCK",
-        description: "8+ clean reps logged through Green FormFix Lens.",
+        title: reward?.level_after && reward.level_before && reward.level_after > reward.level_before ? `LEVEL UP · LEVEL ${reward.level_after}` : reward?.xp_earned ? `WORKOUT COMPLETE · +${reward.xp_earned} XP` : "EXERCISE STRUCK",
+        description: newBadges.length ? `Badge unlocked: ${newBadges.join(", ").replaceAll("_", " ")}` : "8+ clean reps logged through Green FormFix Lens.",
       });
     }
     if (skippedExerciseId) {
@@ -123,6 +128,7 @@ const DayExercises = () => {
       });
   }, [planId, dayId]);
 
+  if (planLoading) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Loading your workout…</div>;
   if (!day) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

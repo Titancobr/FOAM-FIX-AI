@@ -1,6 +1,6 @@
 // src/components/Navbar.tsx
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Sparkles, User } from "lucide-react";
+import { Dumbbell, Sparkles, User, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
@@ -24,6 +24,7 @@ const Navbar = () => {
   const links = [
     { to: "/", label: "Home" },
     { to: "/workouts", label: "Workouts" },
+    { to: "/community", label: "Arena" },
     { to: "/recipes", label: "Recipes" },
   ];
 
@@ -55,7 +56,7 @@ const Navbar = () => {
             key={link.label}
             to={link.to}
             className={`relative rounded-full px-4 py-2 text-sm font-medium transition-colors duration-300 hover:text-primary ${
-              path === link.to ? "text-primary" : "text-foreground/70"
+              (path === link.to || (link.to === "/community" && path.startsWith("/community/"))) ? "text-primary" : "text-foreground/70"
             }`}
           >
             {path === link.to ? (

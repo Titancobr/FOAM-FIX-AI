@@ -194,7 +194,7 @@ const Index = () => {
         {/* Footer */}
         <footer className="border-t border-border/30 py-8">
           <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">© 2026 FornFix. All rights reserved.</span>
+            <span className="text-xs text-muted-foreground">© 2026 FormFix. All rights reserved.</span>
             <span className="text-xs text-muted-foreground">Built with &lt;3</span>
           </div>
         </footer>

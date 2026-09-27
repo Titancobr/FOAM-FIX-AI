@@ -16,6 +16,8 @@ import ScanMeal from "./pages/ScanMeal";
 import NotFound from "./pages/NotFound";
 import Camera from "./pages/Camera";
 import UserProfile from "./pages/UserProfile";
+import Community from "./pages/Community";
+import CommunityProfile from "./pages/CommunityProfile";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +45,8 @@ const App = () => (
           <Route path="/camera" element={<Camera />} />
 
           <Route path="/profile" element={<UserProfile />} />
+          <Route path="/community" element={<Community />} />
+          <Route path="/community/profile/:userId" element={<CommunityProfile />} />
           
           <Route path="/quiz" element={<Quiz />} />
           <Route path="/recipes" element={<Recipes />} />

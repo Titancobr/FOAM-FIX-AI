@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { User, Flame, Trophy, Dumbbell, LogOut, ChevronRight } from "lucide-react";
+import { User, Flame, Trophy, Dumbbell, LogOut, ChevronRight, Check, RefreshCw } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 
@@ -18,6 +18,12 @@ interface ProgressSummary {
   };
 }
 
+interface PlanHistoryItem {
+  plan_id: string; name: string; is_custom: boolean; workout_days: number; completed_days: number; last_activity: string | null;
+}
+interface ActivePlan { plan_id: string; name: string; description?: string; is_custom: boolean; plan?: { days?: { id: string; name: string }[] }; }
+interface PlanProfile { active_plan: ActivePlan | null; history: PlanHistoryItem[]; }
+
 interface FitUser {
   user_id?: number;
   name?: string;
@@ -28,6 +34,7 @@ const UserProfile = () => {
   const navigate = useNavigate();
   const [fitUser, setFitUser] = useState<FitUser | null>(null);
   const [progressSummary, setProgressSummary] = useState<ProgressSummary | null>(null);
+  const [planProfile, setPlanProfile] = useState<PlanProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,10 +59,13 @@ const UserProfile = () => {
       return;
     }
 
-    fetch(`${API_URL}/progress/summary/${parsed.user_id}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setProgressSummary(data);
+    Promise.all([
+      fetch(`${API_URL}/progress/summary/${parsed.user_id}`).then((res) => res.ok ? res.json() : null),
+      fetch(`${API_URL}/workouts/profile/${parsed.user_id}`).then((res) => res.ok ? res.json() : null),
+    ])
+      .then(([progress, plans]) => {
+        if (progress) setProgressSummary(progress);
+        if (plans) setPlanProfile(plans);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -98,6 +108,34 @@ const UserProfile = () => {
             )}
           </div>
         </motion.div>
+
+        {/* Active workout plan and preserved plan history */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card mb-6 border-primary/20 p-6"
+        >
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-primary">Training plan</p>
+              <h2 className="mt-1 font-heading text-3xl uppercase">{planProfile?.active_plan?.name || "No active plan yet"}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{planProfile?.active_plan ? (planProfile.active_plan.is_custom ? "Your saved custom workout plan" : "Your selected workout plan") : "Choose a plan to start tracking your training."}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {planProfile?.active_plan?.is_custom && <button onClick={() => navigate("/quiz")} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs hover:border-primary/40 hover:text-primary"><RefreshCw className="h-3.5 w-3.5" />Retake quiz</button>}
+              <button onClick={() => navigate("/workouts")} className="btn-primary inline-flex items-center gap-2 px-4 py-2 text-xs">Change plan <ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+          {planProfile?.active_plan?.description && <p className="mb-4 text-sm text-muted-foreground">{planProfile.active_plan.description}</p>}
+          {planProfile?.active_plan?.plan?.days && <div className="mb-4 flex flex-wrap gap-2">{planProfile.active_plan.plan.days.map((day) => <span key={day.id} className="rounded-full border border-primary/15 bg-primary/[.05] px-3 py-1 text-xs text-primary">{day.name}</span>)}</div>}
+          {planProfile?.history?.length ? <div className="border-t border-white/10 pt-4">
+            <p className="mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">Workout plan history · kept when you switch</p>
+            <div className="space-y-2">{planProfile.history.map((item) => <div key={item.plan_id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[.025] px-3 py-2.5">
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.name}{planProfile.active_plan?.plan_id === item.plan_id && <span className="ml-2 inline-flex items-center gap-1 text-[9px] font-medium uppercase tracking-widest text-primary"><Check className="h-3 w-3" />Active</span>}</p><p className="text-xs text-muted-foreground">{item.completed_days} completed · {item.workout_days} days started</p></div>
+              {item.last_activity && <span className="text-[10px] text-muted-foreground">Last trained {new Date(item.last_activity).toLocaleDateString()}</span>}
+            </div>)}</div>
+          </div> : <p className="border-t border-white/10 pt-4 text-xs text-muted-foreground">Workout history will appear here as you train.</p>}
+        </motion.section>
 
         {/* Progress Tracker */}
         <motion.div

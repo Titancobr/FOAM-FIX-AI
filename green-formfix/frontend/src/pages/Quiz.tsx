@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { generateCustomPlan, API_URL } from "@/lib/workoutPlans";
 
 interface QuizQuestion {
   question: string;
@@ -60,6 +61,7 @@ const questions: QuizQuestion[] = [
 const Quiz = () => {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -67,7 +69,7 @@ const Quiz = () => {
     setAnswers((prev) => ({ ...prev, [currentQ]: value }));
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!answers[currentQ]) {
       toast({ title: "Please select an option", variant: "destructive" });
       return;
@@ -75,10 +77,30 @@ const Quiz = () => {
     if (currentQ < questions.length - 1) {
       setCurrentQ(currentQ + 1);
     } else {
-      // Quiz complete
-      localStorage.setItem("quizAnswers", JSON.stringify(answers));
-      toast({ title: "Custom plan generated!" });
-      navigate("/workout/ppl"); // Navigate to PPL as placeholder
+      let userId: number | undefined;
+      try { userId = JSON.parse(localStorage.getItem("fitUser") || "null")?.user_id; } catch { /* Sign-in required to save a plan. */ }
+      if (!userId) {
+        localStorage.setItem("quizAnswers", JSON.stringify(answers));
+        toast({ title: "Sign in to save your custom plan", description: "Your quiz answers are saved on this device." });
+        navigate("/login");
+        return;
+      }
+      setSaving(true);
+      try {
+        const plan = generateCustomPlan(answers, userId);
+        const response = await fetch(`${API_URL}/workouts/activate`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, plan_id: plan.id, plan }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Could not save custom plan");
+        localStorage.setItem("quizAnswers", JSON.stringify(answers));
+        localStorage.setItem("activeWorkoutPlanId", plan.id);
+        toast({ title: "Custom plan saved to your profile" });
+        navigate(`/workout/${plan.id}`);
+      } catch (error) {
+        toast({ title: error instanceof Error ? error.message : "Could not save custom plan", variant: "destructive" });
+      } finally { setSaving(false); }
     }
   };
 
@@ -151,10 +173,10 @@ const Quiz = () => {
       <div className="px-5 pb-8">
         <Button
           onClick={handleNext}
-          disabled={!answers[currentQ]}
+          disabled={!answers[currentQ] || saving}
           className="w-full h-14 bg-primary text-primary-foreground font-display text-xl disabled:opacity-40"
         >
-          {currentQ === questions.length - 1 ? "Generate Plan" : "Next"}
+          {saving ? "Saving plan…" : currentQ === questions.length - 1 ? "Generate Plan" : "Next"}
           <ArrowRight className="ml-2 h-5 w-5" />
         </Button>
       </div>

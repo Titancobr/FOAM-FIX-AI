@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Home, ScanLine, UtensilsCrossed } from "lucide-react";
+import { Dumbbell, Home, ScanLine, UtensilsCrossed, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 
 const BottomNav = () => {
@@ -9,6 +9,7 @@ const BottomNav = () => {
   const links = [
     { to: "/", icon: Home, label: "Home" },
     { to: "/workouts", icon: Dumbbell, label: "Workouts" },
+    { to: "/community", icon: Trophy, label: "Arena" },
     { to: "/recipes", icon: UtensilsCrossed, label: "Meals" },
     { to: "/scan", icon: ScanLine, label: "Scan" },
   ];
@@ -22,7 +23,7 @@ const BottomNav = () => {
     >
       <div className="mx-auto flex h-16 items-center justify-around">
         {links.map((link) => {
-          const isActive = path === link.to;
+          const isActive = path === link.to || (link.to === "/community" && path.startsWith("/community/"));
           return (
             <Link key={link.to} to={link.to} className="relative flex min-w-[68px] items-center justify-center">
               {isActive ? (

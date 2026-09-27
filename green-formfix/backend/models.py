@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text, UniqueConstraint
 from database import Base
 from datetime import datetime
 
@@ -9,6 +9,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True)
     hashed_password = Column(String(255))
+    username = Column(String(40), unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -142,3 +143,80 @@ class ExerciseSessionReport(Base):
     common_mistakes = Column(Text, default="")
     report_json = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class FitnessGame(Base):
+    __tablename__ = "fitness_game_profiles"
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    xp = Column(Integer, default=0, nullable=False)
+    current_streak = Column(Integer, default=0, nullable=False)
+    best_streak = Column(Integer, default=0, nullable=False)
+    last_workout_date = Column(String(10), nullable=True)
+    last_checkin_date = Column(String(10), nullable=True)
+
+
+class XpEvent(Base):
+    __tablename__ = "fitness_xp_events"
+    __table_args__ = (UniqueConstraint("user_id", "event_key", name="uq_xp_user_event"),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    event_key = Column(String(180), nullable=False)
+    amount = Column(Integer, nullable=False)
+    reason = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FitnessBadge(Base):
+    __tablename__ = "fitness_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_key", name="uq_badge_user_key"),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    badge_key = Column(String(60), nullable=False)
+    earned_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FitnessActivity(Base):
+    __tablename__ = "fitness_activities"
+    __table_args__ = (UniqueConstraint("user_id", "event_key", name="uq_activity_user_event"),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    event_key = Column(String(180), nullable=False)
+    kind = Column(String(40), nullable=False)
+    detail = Column(String(255), default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class FitnessFollow(Base):
+    __tablename__ = "fitness_follows"
+    __table_args__ = (UniqueConstraint("follower_id", "following_id", name="uq_follow_pair"),)
+    id = Column(Integer, primary_key=True)
+    follower_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    following_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FitnessFriendRequest(Base):
+    __tablename__ = "fitness_friend_requests"
+    __table_args__ = (UniqueConstraint("sender_id", "recipient_id", name="uq_friend_pair"),)
+    id = Column(Integer, primary_key=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    recipient_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    status = Column(String(20), default="pending", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CustomWorkoutPlan(Base):
+    __tablename__ = "custom_workout_plans"
+    plan_id = Column(String(120), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    plan_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ActiveWorkoutPlan(Base):
+    __tablename__ = "active_workout_plans"
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    plan_id = Column(String(120), nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)

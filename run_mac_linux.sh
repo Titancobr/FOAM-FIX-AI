@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
 
 echo "========================================================"
 echo "    FORM-FIX AI Pose Trainer - Mac / Linux Launcher"
@@ -7,23 +7,51 @@ echo "========================================================"
 echo ""
 
 # Check Docker CLI
-if ! command -v docker &> /dev/null; then
+if ! command -v docker >/dev/null 2>&1; then
     echo "[ERROR] Docker is not installed or not in PATH."
-    echo "Please install Docker from https://www.docker.com/"
+    echo "Install Docker Desktop from:"
+    echo "https://www.docker.com/products/docker-desktop/"
     exit 1
 fi
 
-# Check Docker Engine
+# Detect Docker Compose command
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+else
+    echo "[ERROR] Docker Compose is not installed."
+    echo "Install Docker Desktop or the Docker Compose plugin."
+    exit 1
+fi
+
+# Check Docker daemon
 echo "[*] Checking Docker daemon status..."
-if ! docker info &> /dev/null; then
-    echo "[WARNING] Docker daemon is not running."
-    echo "Please start Docker Desktop / daemon and re-run this script."
+
+if ! docker info >/dev/null 2>&1; then
+    echo "[ERROR] Docker daemon is not running."
+
+    case "$(uname -s)" in
+        Darwin)
+            echo "Start Docker Desktop and run this script again."
+            ;;
+        Linux)
+            echo "Start Docker with:"
+            echo "  sudo systemctl enable --now docker"
+            ;;
+        *)
+            echo "Start Docker and run this script again."
+            ;;
+    esac
+
     exit 1
 fi
 
 echo "[OK] Docker daemon is active."
+echo "[OK] Compose command: ${COMPOSE_CMD[*]}"
+
 echo "[*] Building and starting FormFix containers..."
-docker compose up --build -d
+"${COMPOSE_CMD[@]}" up --build -d
 
 echo ""
 echo "========================================================"
@@ -34,12 +62,20 @@ echo " - Backend API:       http://localhost:8000"
 echo " - Interactive Docs:  http://localhost:8000/docs"
 echo ""
 
-# Open browser based on OS
+# Give the frontend a moment to start
 sleep 4
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    open "http://localhost:3000" || true
-elif command -v xdg-open &> /dev/null; then
-    xdg-open "http://localhost:3000" || true
+
+# Open the frontend in the default browser
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    open "http://localhost:3000" >/dev/null 2>&1 || true
+elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "http://localhost:3000" >/dev/null 2>&1 || true
+elif command -v gio >/dev/null 2>&1; then
+    gio open "http://localhost:3000" >/dev/null 2>&1 || true
+else
+    echo "Open http://localhost:3000 in your browser."
 fi
 
-echo "To stop containers, run: docker compose down"
+echo ""
+echo "To stop the containers, run:"
+echo "  ${COMPOSE_CMD[*]} down"

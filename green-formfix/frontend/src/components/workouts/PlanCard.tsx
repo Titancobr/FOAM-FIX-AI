@@ -19,9 +19,12 @@ interface PlanCardProps {
   plan: WorkoutPlan;
   index: number;
   onClick: () => void;
+  isActive?: boolean;
+  onActivate?: () => void;
+  onRetake?: () => void;
 }
 
-const PlanCard = ({ plan, index, onClick }: PlanCardProps) => {
+const PlanCard = ({ plan, index, onClick, isActive = false, onActivate, onRetake }: PlanCardProps) => {
   // Determine level based on ID
   const level = plan.id === "ppl" ? "Intermediate" : "Advanced";
   
@@ -39,7 +42,7 @@ const PlanCard = ({ plan, index, onClick }: PlanCardProps) => {
         ease: [0.25, 0.46, 0.45, 0.94] 
       }}
       onClick={onClick}
-      className="group cursor-pointer glass-card overflow-hidden hover-lift"
+      className="group relative cursor-pointer glass-card overflow-hidden hover-lift"
     >
       <div className="relative h-72 overflow-hidden">
         <img
@@ -66,6 +69,7 @@ const PlanCard = ({ plan, index, onClick }: PlanCardProps) => {
         </div>
       </div>
 
+      {isActive && <div className="absolute left-4 top-4 rounded-full border border-primary/30 bg-background/80 px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-primary">Active plan</div>}
       <div className="p-6">
         <p className="text-muted-foreground text-sm mb-5 font-body leading-relaxed line-clamp-2">
           {plan.description}
@@ -84,6 +88,8 @@ const PlanCard = ({ plan, index, onClick }: PlanCardProps) => {
             <ArrowRight className="w-5 h-5 text-primary group-hover:text-black transition-transform group-hover:translate-x-0.5" />
           </div>
         </div>
+        {onActivate && <button type="button" onClick={(event) => { event.stopPropagation(); onActivate(); }} className={`mt-5 w-full rounded-xl border px-4 py-3 text-xs font-semibold uppercase tracking-[.16em] transition ${isActive ? "border-primary/25 bg-primary/10 text-primary" : "border-white/10 bg-white/[.03] text-foreground hover:border-primary/40 hover:text-primary"}`}>{isActive ? "Currently active" : "Set as active plan"}</button>}
+        {onRetake && <button type="button" onClick={(event) => { event.stopPropagation(); onRetake(); }} className="mt-2 w-full rounded-xl px-4 py-2 text-[10px] font-semibold uppercase tracking-[.16em] text-muted-foreground transition hover:text-primary">Retake quiz / change custom plan</button>}
       </div>
     </motion.div>
   );
