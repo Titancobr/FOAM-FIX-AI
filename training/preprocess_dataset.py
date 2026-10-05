@@ -101,15 +101,31 @@ def _normalize_landmarks(landmarks):
     return row
 
 
-def extract_video_frames(video_path: Path, pose, sequence_length: int, stride: int = 15):
+def extract_video_frames(
+    video_path: Path,
+    pose,
+    sequence_length: int,
+    stride: int = 15,
+    max_windows: int = 0,
+    max_dimension: int = 480,
+):
     """Extract frames from video and slice into overlapping sequence windows."""
     cap = cv2.VideoCapture(str(video_path))
     frames = []
+    windows = []
+    effective_stride = max(1, stride)
 
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
+
+        # Downscale large frames for faster decoding and MediaPipe inference
+        h, w = frame.shape[:2]
+        if max(h, w) > max_dimension:
+            scale = max_dimension / float(max(h, w))
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         result = pose.process(rgb)
 
@@ -117,17 +133,15 @@ def extract_video_frames(video_path: Path, pose, sequence_length: int, stride: i
             row = _normalize_landmarks(result.pose_landmarks.landmark)
             frames.append(row)
 
+            # Check if a new sequence window can be formed
+            if len(frames) >= sequence_length:
+                offset = len(frames) - sequence_length
+                if offset % effective_stride == 0:
+                    windows.append(frames[-sequence_length:])
+                    if max_windows > 0 and len(windows) >= max_windows:
+                        break
+
     cap.release()
-
-    windows = []
-    effective_stride = max(1, stride)
-    total_frames = len(frames)
-
-    for start_idx in range(0, max(total_frames - sequence_length + 1, 0), effective_stride):
-        window = frames[start_idx : start_idx + sequence_length]
-        if len(window) == sequence_length:
-            windows.append(window)
-
     return windows
 
 
@@ -156,13 +170,15 @@ def main():
     input_dir = Path(args.input_dir)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_dir = output_path.parent / ".class_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     include_labels = set()
     if args.include_labels.strip():
         include_labels = {label.strip() for label in args.include_labels.split(",") if label.strip()}
         logger.info("Filtering specified labels (%d): %s", len(include_labels), sorted(include_labels))
 
-    # Discover classes
+    # Discover classes and all video files case-insensitively (.mp4, .mov, .avi)
     candidate_dirs = sorted(p for p in input_dir.iterdir() if p.is_dir())
     class_videos = {}
 
@@ -172,9 +188,8 @@ def main():
             continue
 
         vids = sorted([
-            *label_dir.glob("*.mp4"),
-            *label_dir.glob("*.mov"),
-            *label_dir.glob("*.avi"),
+            p for p in label_dir.iterdir()
+            if p.is_file() and p.suffix.lower() in {".mp4", ".mov", ".avi"}
         ])
         if vids:
             class_videos[label] = vids
@@ -184,6 +199,7 @@ def main():
         logger.info("  %s: %d videos", label, len(vids))
 
     class_sequences = defaultdict(list)
+    total_classes = len(class_videos)
 
     with mp_pose.Pose(
         static_image_mode=False,
@@ -191,14 +207,40 @@ def main():
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     ) as pose:
-        for label, video_files in class_videos.items():
+        for idx, (label, video_files) in enumerate(class_videos.items(), start=1):
+            cache_file = cache_dir / f"{label}.npy"
+            if cache_file.exists():
+                cached_data = np.load(cache_file, allow_pickle=True)
+                class_sequences[label] = list(cached_data)
+                logger.info(
+                    "[%d/%d] '%s': Loaded %d sequences from cache.",
+                    idx, total_classes, label, len(class_sequences[label])
+                )
+                continue
+
             num_vids = len(video_files)
             stride = get_class_stride(num_vids, base_stride=args.stride, adaptive=args.adaptive_stride)
-            logger.info("Processing '%s' (%d videos, stride=%d)...", label, num_vids, stride)
+            max_windows_per_video = (
+                max(args.max_sequences_per_class // num_vids + 5, 20)
+                if (args.max_sequences_per_class > 0 and num_vids > 6)
+                else 0
+            )
+
+            logger.info(
+                "[%d/%d] Processing '%s' (%d videos, stride=%d, max_win/vid=%s)...",
+                idx, total_classes, label, num_vids, stride,
+                str(max_windows_per_video) if max_windows_per_video else "all"
+            )
 
             label_windows = []
-            for video_path in video_files:
-                windows = extract_video_frames(video_path, pose, args.sequence_length, stride=stride)
+            for v_idx, video_path in enumerate(video_files, start=1):
+                windows = extract_video_frames(
+                    video_path,
+                    pose,
+                    args.sequence_length,
+                    stride=stride,
+                    max_windows=max_windows_per_video,
+                )
                 label_windows.extend(windows)
 
             if not label_windows:
@@ -207,12 +249,13 @@ def main():
 
             # Balance: Cap if requested
             if args.max_sequences_per_class > 0 and len(label_windows) > args.max_sequences_per_class:
-                # Subsample evenly across extracted sequences
                 indices = np.linspace(0, len(label_windows) - 1, args.max_sequences_per_class, dtype=int)
                 label_windows = [label_windows[i] for i in indices]
 
             class_sequences[label] = label_windows
-            logger.info("Label '%s' final sequences: %d", label, len(label_windows))
+            # Save to class cache
+            np.save(cache_file, np.asarray(label_windows, dtype=np.float32))
+            logger.info("  -> '%s' complete: %d sequences cached.", label, len(label_windows))
 
     if not class_sequences:
         raise RuntimeError(
@@ -242,6 +285,12 @@ def main():
         label_names=np.asarray(label_names),
     )
 
+    import json
+    models_dir = Path("models")
+    models_dir.mkdir(parents=True, exist_ok=True)
+    with open(models_dir / "label_names.json", "w") as f:
+        json.dump(label_names, f, indent=2)
+
     logger.info("=" * 60)
     logger.info("Dataset Preprocessing Complete!")
     logger.info("Total Sequences: %d", len(X_array))
@@ -249,6 +298,7 @@ def main():
     logger.info("Number of Classes: %d", len(label_names))
     logger.info("Class Imbalance Ratio: %.2fx (Min: %d, Max: %d)", imbalance_ratio, min(counts), max(counts))
     logger.info("Saved to: %s", output_path)
+    logger.info("Saved label names to: %s", models_dir / "label_names.json")
     logger.info("=" * 60)
 
 

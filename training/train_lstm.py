@@ -6,6 +6,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
 import tensorflow as tf
+import mlflow
+import mlflow.tensorflow
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 
@@ -102,7 +104,12 @@ def compile_tuned_model(model, base_lr, warmup_epochs, total_epochs, batch_size,
 
 
 def main():
-    args = parse_args()
+    mlflow.set_tracking_uri('http://127.0.0.1:5000')
+    mlflow.tensorflow.autolog()
+
+    with mlflow.start_run():
+        args = parse_args()
+        mlflow.log_params(vars(args))
     dataset_path = Path(args.dataset)
     if not dataset_path.exists():
         raise FileNotFoundError(
@@ -132,7 +139,11 @@ def main():
     y_test_cat = to_categorical(y_test, num_classes)
     input_shape = (X.shape[1], X.shape[2])
 
-    Path("models").mkdir(parents=True, exist_ok=True)
+    models_dir = Path("models")
+    models_dir.mkdir(parents=True, exist_ok=True)
+    import json
+    with open(models_dir / "label_names.json", "w") as f:
+        json.dump(label_names, f, indent=2)
 
     # 1. Train Tuned BiLSTM
     logger.info("=" * 50)
@@ -154,7 +165,7 @@ def main():
         ModelCheckpoint(args.output_bilstm, monitor="val_accuracy", save_best_only=True, verbose=1),
     ]
 
-    bilstm_model.fit(
+    bilstm_history = bilstm_model.fit(
         X_train,
         y_train_cat,
         epochs=args.bilstm_epochs,
@@ -164,6 +175,7 @@ def main():
         class_weight=class_weight_map,
         verbose=1,
     )
+    mlflow.log_metric('bilstm_val_accuracy', float(bilstm_history.history['val_accuracy'][-1]))
 
     # 2. Train Tuned LSTM
     logger.info("=" * 50)
@@ -185,7 +197,7 @@ def main():
         ModelCheckpoint(args.output_lstm, monitor="val_accuracy", save_best_only=True, verbose=1),
     ]
 
-    lstm_model.fit(
+    lstm_history = lstm_model.fit(
         X_train,
         y_train_cat,
         epochs=args.lstm_epochs,
@@ -195,6 +207,7 @@ def main():
         class_weight=class_weight_map,
         verbose=1,
     )
+    mlflow.log_metric('lstm_val_accuracy', float(lstm_history.history['val_accuracy'][-1]))
 
     logger.info("Completed training for BiLSTM and LSTM models.")
 

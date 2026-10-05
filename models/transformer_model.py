@@ -11,6 +11,7 @@ from tensorflow.keras.layers import (
 )
 
 
+@tf.keras.utils.register_keras_serializable(package="FormFix")
 class PositionalEncoding(tf.keras.layers.Layer):
     """Sinusoidal positional encoding for temporal landmark sequences."""
 
@@ -45,6 +46,7 @@ class PositionalEncoding(tf.keras.layers.Layer):
         return config
 
 
+@tf.keras.utils.register_keras_serializable(package="FormFix")
 class TransformerBlock(tf.keras.layers.Layer):
     """
     Pre-norm Transformer block with multi-head attention and two-layer feedforward network.

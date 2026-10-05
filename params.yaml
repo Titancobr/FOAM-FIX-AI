@@ -1,0 +1,18 @@
+# params.yaml
+# Hyperparameters and configuration for the DVC pipeline
+# Adjust these values and commit the file – DVC will trigger a pipeline run.
+
+epochs:
+  lstm: 40
+  bilstm: 50
+batch_size: 32
+learning_rate: 5e-4
+warmup_epochs: 3
+label_smoothing: 0.1
+
+# Paths (relative to repository root)
+paths:
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+  model_dir: "models"
+  logs: "mlruns"

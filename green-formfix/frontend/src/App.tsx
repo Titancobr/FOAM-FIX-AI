@@ -18,6 +18,7 @@ import Camera from "./pages/Camera";
 import UserProfile from "./pages/UserProfile";
 import Community from "./pages/Community";
 import CommunityProfile from "./pages/CommunityProfile";
+import JarvisVoice from "./components/JarvisVoice";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,8 @@ const App = () => (
           <Route path="/scan" element={<ScanMeal />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <JarvisVoice />
+        <JarvisVoice />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

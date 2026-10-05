@@ -31,7 +31,9 @@ class LiveExercisePredictor:
             "TransformerBlock": TransformerBlock,
             "PositionalEncoding": PositionalEncoding,
         }
-        self.model = keras.models.load_model(self.model_path, custom_objects=custom_objects)
+        self.model = keras.models.load_model(
+            self.model_path, custom_objects=custom_objects, compile=False
+        )
 
         self.sequence_buffer = []
         self.ema_probs = None

@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import sys
 import time
@@ -59,6 +60,52 @@ def health():
         "status": "ok",
         "timestamp": time.time(),
         "service": "formfix-backend",
+    }
+
+
+@app.get("/ai/status")
+def ai_status():
+    """Expose whether reports are using an external LLM or the local fallback."""
+    return llm_coach.status()
+
+
+class VoiceRequestSchema(BaseModel):
+    message: str
+    context: str = ""
+
+
+class WorkoutGuideSchema(BaseModel):
+    plan_name: str
+    day_name: str
+    focus: str
+    exercises: list[dict]
+
+
+@app.post("/ai/voice")
+def ai_voice(request: VoiceRequestSchema):
+    """Return a short spoken Jarvis-style response using the configured LLM."""
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Voice message cannot be empty")
+    return {
+        "reply": llm_coach.voice_reply(message, request.context),
+        "llm": llm_coach.status(),
+    }
+
+
+@app.post("/ai/workout-guide")
+def ai_workout_guide(request: WorkoutGuideSchema):
+    """Give an Ollama-powered spoken briefing for the selected workout day."""
+    if not request.exercises:
+        raise HTTPException(status_code=400, detail="Workout must contain at least one exercise")
+    return {
+        "briefing": llm_coach.workout_briefing(
+            plan_name=request.plan_name,
+            day_name=request.day_name,
+            focus=request.focus,
+            exercises=request.exercises,
+        ),
+        "llm": llm_coach.status(),
     }
 
 # 3. Create DB tables (auth + progress tracking).
@@ -253,6 +300,7 @@ EXERCISE_ALIASES = {
     "pull up": "pull_up",
     "push-up": "push_up",
     "push-ups": "push_up",
+    "push ups": "push_up",
     "push up": "push_up",
     "barbell squats": "barbell_squat",
     "barbell squat": "barbell_squat",
@@ -270,27 +318,14 @@ EXERCISE_ALIASES = {
     "romanian deadlift": "romanian_deadlift",
     "barbell rows": "barbell_row",
     "rows": "barbell_row",
-    "seated cable row": "seated_cable_row",
-    "face pulls": "face_pull",
     "dips": "dips",
     "tricep pushdowns": "tricep_pushdown",
-    "skull crushers": "skull_crusher",
-    "overhead tricep extension": "overhead_tricep_extension",
     "squats": "squat",
-    "calf raises": "calf_raise",
-    "leg curls": "romanian_deadlift",
-    "leg extensions": "squat",
-    "leg press": "squat",
-    "bulgarian split squats": "bulgarian_split_squat",
+    "leg extensions": "leg_extension",
     "military press": "military_press",
     "flat bench press": "flat_bench_press",
     "incline bench press": "incline_bench_press",
-    "incline dumbbell fly": "incline_dumbbell_fly",
     "cable flyes": "cable_fly",
-    "dumbbell flyes": "dumbbell_fly",
-    "shrugs": "overhead_press",
-    "reverse flyes": "face_pull",
-    "preacher curls": "preacher_curl",
     "barbell curls": "barbell_curl",
     "hammer curls": "hammer_curl",
 }
@@ -682,6 +717,10 @@ def session_summary_payload(session_id: str, exercise_name: str, reps: int, prev
         reverse=True,
     )[:3]
     common_mistakes = [code for code, _ in top_mistakes]
+    previous_mistakes = list((previous_report or {}).get("common_mistakes") or [])
+    mistakes_fixed = [code for code in previous_mistakes if code not in common_mistakes]
+    mistakes_repeated = [code for code in common_mistakes if code in previous_mistakes]
+    new_mistakes = [code for code in common_mistakes if code not in previous_mistakes]
     perfect_reps = int(session.get("perfect_reps", 0))
     corrected_reps = int(session.get("corrected_reps", 0))
     poor_reps = int(session.get("poor_reps", 0))
@@ -733,6 +772,10 @@ def session_summary_payload(session_id: str, exercise_name: str, reps: int, prev
         consistency_score=consistency_score,
         rep_reports=rep_reports,
         previous_report=previous_report,
+        previous_mistakes=previous_mistakes,
+        mistakes_fixed=mistakes_fixed,
+        mistakes_repeated=mistakes_repeated,
+        new_mistakes=new_mistakes,
     )
     progress_comparison = report.get("progress_since_last") if isinstance(report, dict) else None
     still_to_improve = report.get("still_to_improve") if isinstance(report, dict) else None
@@ -746,6 +789,10 @@ def session_summary_payload(session_id: str, exercise_name: str, reps: int, prev
         "average_rep_quality": average_rep_quality,
         "consistency_score": consistency_score,
         "common_mistakes": common_mistakes,
+        "previous_mistakes": previous_mistakes,
+        "mistakes_fixed_since_last": mistakes_fixed,
+        "mistakes_repeated_since_last": mistakes_repeated,
+        "new_mistakes_since_last": new_mistakes,
         "what_went_right": what_went_right,
         "what_went_wrong": what_went_wrong,
         "rep_breakdown": rep_reports,
@@ -753,6 +800,7 @@ def session_summary_payload(session_id: str, exercise_name: str, reps: int, prev
         "progress_since_last": progress_comparison,
         "still_to_improve": still_to_improve,
         "report": report,
+        "llm": llm_coach.status(),
     }
 
 # 5. Register endpoint
@@ -1430,6 +1478,7 @@ def analyze_frame(payload: AnalyzeFrameSchema):
     reps, stage, tracked_angle = counter.update(angles)
     posture_result = analyzer.analyze(exercise, angles)
     correction = coach_message(exercise.name, posture_result, reps)
+    correction_source = "local"
     session = update_session_stats(payload.session_id, posture_result, payload.reset)
     session["exercise"] = exercise.name
     session["reps"] = reps
@@ -1450,6 +1499,7 @@ def analyze_frame(payload: AnalyzeFrameSchema):
             local_message=correction,
         )
         session["last_llm_time"] = time.time()
+        correction_source = "ollama" if llm_coach.last_completion_provider == "ollama" else "local"
 
     accuracy = 0
     if session["frames"] > 0:
@@ -1475,6 +1525,8 @@ def analyze_frame(payload: AnalyzeFrameSchema):
         "tracked_angle_definition": tracked_angle_meta(exercise)["definition"],
         "accuracy": accuracy,
         "common_mistake": common_mistake,
+        "correction_source": correction_source,
+        "llm": llm_coach.status(),
         "processing_ms": round((time.perf_counter() - started_at) * 1000, 1),
         "ready": True,
     }

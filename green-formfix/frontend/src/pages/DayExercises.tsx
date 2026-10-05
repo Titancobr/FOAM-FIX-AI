@@ -12,13 +12,15 @@ import {
   Camera,
   Sparkles,
   X,
+  Loader2,
+  Volume2,
 } from "lucide-react";
 import { useWorkoutPlan } from "@/lib/workoutPlans";
 import { Button } from "@/components/ui/button";
 import BottomNav from "@/components/BottomNav";
 import { useToast } from "@/hooks/use-toast";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 type ExerciseReport = {
   exercise: string;
@@ -27,6 +29,10 @@ type ExerciseReport = {
   perfect_reps: number;
   corrected_reps: number;
   common_mistakes: string[];
+  previous_mistakes?: string[];
+  mistakes_fixed_since_last?: string[];
+  mistakes_repeated_since_last?: string[];
+  new_mistakes_since_last?: string[];
   what_went_right: string[];
   what_went_wrong: string[];
   rep_breakdown: Array<{
@@ -50,6 +56,13 @@ type ExerciseReport = {
   } | null;
   progress_since_last?: string | null;
   still_to_improve?: string | null;
+  llm?: {
+    configured_provider?: string;
+    enabled?: boolean;
+    last_completion_provider?: string | null;
+    report_source?: "llm" | "local_fallback";
+    last_completion_error?: string | null;
+  };
 };
 
 const DayExercises = () => {
@@ -61,9 +74,65 @@ const DayExercises = () => {
   const [skippedExercises, setSkippedExercises] = useState<string[]>([]);
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [latestReport, setLatestReport] = useState<ExerciseReport | null>(null);
+  const [workoutBriefing, setWorkoutBriefing] = useState("");
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const [briefingLlm, setBriefingLlm] = useState<{ provider?: string; source?: string } | null>(null);
 
   const { plan, loading: planLoading } = useWorkoutPlan(planId);
   const day = plan?.days.find((d) => d.id === dayId);
+
+  useEffect(() => {
+    if (!day) return;
+    localStorage.setItem(
+      "currentWorkoutContext",
+      `${day.name}; focus: ${day.focus}; exercises: ${day.exercises.map((exercise) => `${exercise.name} (${exercise.sets}x${exercise.reps})`).join(", ")}`,
+    );
+    return () => localStorage.removeItem("currentWorkoutContext");
+  }, [day]);
+
+  const speakBriefing = (text: string) => {
+    if (!("speechSynthesis" in window) || !text) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const britishVoice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith("en-gb"));
+    if (britishVoice) utterance.voice = britishVoice;
+    utterance.rate = 0.92;
+    utterance.pitch = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const askJarvisForBriefing = async () => {
+    if (!day) return;
+    setBriefingLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/ai/workout-guide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan_name: plan.name,
+          day_name: day.name,
+          focus: day.focus,
+          exercises: day.exercises.map(({ name, sets, reps, muscle }) => ({ name, sets, reps, muscle })),
+        }),
+      });
+      if (!response.ok) throw new Error("Jarvis could not reach Ollama.");
+      const data = await response.json();
+      const text = String(data.briefing || "At your service, Sir. Begin with the first exercise when ready.");
+      setWorkoutBriefing(text);
+      setBriefingLlm({
+        provider: data.llm?.last_completion_provider || data.llm?.configured_provider,
+        source: data.llm?.last_completion_provider ? "Ollama LLM" : "Local fallback",
+      });
+      speakBriefing(text);
+    } catch {
+      const fallback = `Good day, Sir. Today is ${day.name}, focused on ${day.focus}. Review the exercise list below, move with control, and keep your core braced.`;
+      setWorkoutBriefing(fallback);
+      setBriefingLlm({ source: "Local fallback" });
+      speakBriefing(fallback);
+    } finally {
+      setBriefingLoading(false);
+    }
+  };
 
   useEffect(() => {
     const completedExerciseId = searchParams.get("completed");
@@ -195,6 +264,32 @@ const DayExercises = () => {
         </div>
       </div>
 
+      <div className="px-5 mb-6">
+        <div className="glass-card border-primary/20 bg-primary/5 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary">Jarvis workout briefing</p>
+              <p className="mt-1 text-sm text-muted-foreground">Get today’s exercise order, sets, reps, form reminders, and a readiness check from Ollama.</p>
+            </div>
+            <Button onClick={askJarvisForBriefing} disabled={briefingLoading} className="gap-2 bg-primary text-black hover:bg-primary/90">
+              {briefingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {briefingLoading ? "Jarvis is thinking" : "Ask Jarvis"}
+            </Button>
+          </div>
+          {workoutBriefing && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm leading-relaxed text-white/90">{workoutBriefing}</p>
+                <button onClick={() => speakBriefing(workoutBriefing)} className="shrink-0 rounded-full border border-primary/30 p-2 text-primary hover:bg-primary/10" aria-label="Replay Jarvis briefing">
+                  <Volume2 className="h-4 w-4" />
+                </button>
+              </div>
+              {briefingLlm && <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Briefing engine: {briefingLlm.source}{briefingLlm.provider ? ` (${briefingLlm.provider})` : ""}</p>}
+            </div>
+          )}
+        </div>
+      </div>
+
       <AnimatePresence>
         {latestReport && (
           <motion.div
@@ -239,6 +334,11 @@ const DayExercises = () => {
                 </div>
               </div>
 
+              <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                Report engine: {latestReport.llm?.report_source === "llm" ? "External LLM" : "Local fallback"}
+                {latestReport.llm?.last_completion_provider && ` (${latestReport.llm.last_completion_provider})`}
+              </div>
+
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-secondary/20 p-4">
                   <p className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-primary">
@@ -267,6 +367,26 @@ const DayExercises = () => {
                   </ul>
                 </div>
               </div>
+
+              {(latestReport.previous_report || latestReport.mistakes_fixed_since_last?.length || latestReport.mistakes_repeated_since_last?.length || latestReport.new_mistakes_since_last?.length) && (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Compared with your last {latestReport.exercise.replace(/_/g, " ")} session</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-300">Fixed</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{latestReport.mistakes_fixed_since_last?.length ? latestReport.mistakes_fixed_since_last.map((item) => item.replace(/_/g, " ")).join(", ") : "No previous mistake was fully cleared yet."}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-300">Still showing up</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{latestReport.mistakes_repeated_since_last?.length ? latestReport.mistakes_repeated_since_last.map((item) => item.replace(/_/g, " ")).join(", ") : "None of the previous top mistakes repeated."}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-sky-300">New today</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{latestReport.new_mistakes_since_last?.length ? latestReport.new_mistakes_since_last.map((item) => item.replace(/_/g, " ")).join(", ") : "No new top mistakes recorded."}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 rounded-2xl border border-primary/15 bg-primary/10 p-4">
                 <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Coach Notes</p>

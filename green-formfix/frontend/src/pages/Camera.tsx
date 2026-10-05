@@ -38,9 +38,18 @@ type AiResult = {
   common_mistake: string;
   processing_ms?: number;
   ready: boolean;
+  correction_source?: "local" | "ollama";
+  llm?: {
+    configured_provider: string;
+    enabled: boolean;
+    last_completion_provider: string | null;
+    last_completion_error: string | null;
+  };
 };
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// Empty means same-origin in production (Nginx proxies API requests to FastAPI)
+// and through Vite's dev proxy during local development.
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 const POSE_CONNECTIONS = [
   [11, 12],
@@ -271,6 +280,13 @@ const Camera = () => {
         tracked_angle_label: "Tracked angle",
         tracked_angle_definition: "exercise-specific joints",
         ready: false,
+        correction_source: "local",
+        llm: {
+          configured_provider: "unknown",
+          enabled: false,
+          last_completion_provider: null,
+          last_completion_error: "AI backend is not connected.",
+        },
       }));
     } finally {
       setIsAnalyzing(false);
@@ -491,6 +507,16 @@ const Camera = () => {
                     <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5">
                       <p className="text-[9px] font-mono uppercase text-primary/80">Coach</p>
                       <p className="font-heading text-sm text-primary">{isAnalyzing ? "Live" : "Ready"}</p>
+                    </div>
+                    <div className={`rounded-full border px-3 py-1.5 ${
+                      aiResult?.correction_source === "ollama"
+                        ? "border-primary/20 bg-primary/10"
+                        : "border-white/10 bg-white/5"
+                    }`}>
+                      <p className="text-[9px] font-mono uppercase text-muted-foreground">Jarvis</p>
+                      <p className={`font-heading text-sm ${aiResult?.correction_source === "ollama" ? "text-primary" : "text-white/65"}`}>
+                        {aiResult?.correction_source === "ollama" ? "Ollama LLM" : "Local cue"}
+                      </p>
                     </div>
                   </div>
                 </div>

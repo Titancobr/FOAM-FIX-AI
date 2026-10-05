@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,9 @@ from utils.config import (
     EXERCISE_CONFIGS,
 )
 from utils.visualization import draw_panel, draw_status_line
+
+# Multi-agent system
+from agents.agent_system import AgentSystem
 
 
 def parse_args() -> argparse.Namespace:
@@ -143,7 +147,80 @@ def parse_args() -> argparse.Namespace:
         default="reports/session_report.json",
         help="JSON path for final workout score report.",
     )
+    # ── Agent system arguments ──────────────────────────────────────────
+    parser.add_argument(
+        "--disable-agents",
+        action="store_true",
+        help="Disable the multi-agent AI coaching system (Jarvis, reporter, planner).",
+    )
+    parser.add_argument(
+        "--gemini-api-key",
+        default=None,
+        help="Deprecated and ignored; all CLI agents use Ollama via OLLAMA_HOST and OLLAMA_*_MODEL.",
+    )
+    parser.add_argument(
+        "--elevenlabs-api-key",
+        default=None,
+        help="ElevenLabs API key for Jarvis voice. "
+             "Can also be set via ELEVENLABS_API_KEY env var. Falls back to pyttsx3.",
+    )
+    parser.add_argument(
+        "--disable-elevenlabs",
+        action="store_true",
+        help="Force pyttsx3 voice even if ElevenLabs key is provided.",
+    )
     return parser.parse_args()
+
+
+def _print_post_workout_summary(results: dict) -> None:
+    """Print the agent-generated report and plan to the console."""
+    agent_status = results.get("agents")
+    if agent_status:
+        print("\nAgent status:")
+        for name in ("coach", "reporter", "planner"):
+            details = agent_status.get(name)
+            if isinstance(details, dict):
+                configured = "configured" if details.get("configured") else "not configured"
+                llm = "LLM ready" if details.get("llm_configured") else "local fallback"
+                running = ", running" if details.get("running") else ""
+                print(f"  {name}: {configured}, {llm}{running}")
+                if name == "coach":
+                    print(f"    text: {details.get('text_source', 'unknown')}; audio: {details.get('audio_source', 'unknown')}")
+            elif details:
+                print(f"  {name}: {details}")
+
+    print("\n" + "=" * 70)
+    print("  🤖 AI TRAINER — POST-WORKOUT REPORT")
+    print("=" * 70)
+
+    report = results.get("report", {})
+    if report.get("text"):
+        print(report["text"])
+    else:
+        print("(Report generation fell back to the local template; Ollama returned no response)")
+
+    plan = results.get("plan", {})
+    if plan.get("text"):
+        print("\n" + "=" * 70)
+        print("  📅 TOMORROW'S WORKOUT PLAN")
+        print("=" * 70)
+        print(plan["text"])
+
+        # Also print the structured plan as a quick table
+        plan_exercises = plan.get("plan", [])
+        if plan_exercises:
+            print("\n── Quick Reference ──────────────────────────")
+            for ex in plan_exercises:
+                arrow = "▲" if ex["intensity"] == "increase" else ("▼" if ex["intensity"] == "reduce" else "→")
+                print(f"  {arrow}  {ex['display_name']:<28} {ex['sets']} × {ex['reps']} reps")
+            print("─────────────────────────────────────────────")
+    else:
+        print("\n(Next-day plan fell back to the local planner; Ollama returned no response)")
+
+    print("=" * 70 + "\n")
+
+    if results.get("errors"):
+        print("⚠️  Agent errors:", results["errors"])
 
 
 def main() -> None:
@@ -157,6 +234,14 @@ def main() -> None:
     voice = VoiceEngine(enabled=not args.mute)
     scorer = WorkoutScorer()
     predictor = None
+
+    # ── Agent system ────────────────────────────────────────────────────
+    agent_system = AgentSystem(
+        gemini_api_key=args.gemini_api_key,
+        elevenlabs_api_key=args.elevenlabs_api_key,
+        use_elevenlabs=not args.disable_elevenlabs,
+        enabled=not args.disable_agents,
+    )
 
     if not args.disable_classifier:
         try:
@@ -190,12 +275,16 @@ def main() -> None:
     if not cap.isOpened():
         raise RuntimeError("Unable to open the camera. Check webcam permissions and index.")
 
+    # ── Start the agent system ──────────────────────────────────────────
+    agent_system.start()
+
     last_spoken_message: Optional[str] = None
     predicted_exercise_name: Optional[str] = None
     prediction_confidence = 0.0
     prediction_source = "profile_only"
     frame_idx = 0
     last_milestone_spoken = 0
+    prev_rep_count = 0
 
     while True:
         ret, frame = cap.read()
@@ -226,6 +315,7 @@ def main() -> None:
                             counter = RepCounter(exercise)
                             last_spoken_message = None
                             last_milestone_spoken = 0
+                            prev_rep_count = 0
                         prediction_confidence = prediction["confidence"]
                         prediction_source = prediction.get("source", args.predictor_mode)
 
@@ -235,6 +325,22 @@ def main() -> None:
             posture_message = posture_result["message"]
             scorer.update(exercise.name, reps, posture_result)
 
+            # ── Route events to Agent 1 (Jarvis) ───────────────────────
+            if posture_result.get("is_good"):
+                agent_system.on_good_form(exercise.name)
+            else:
+                agent_system.on_form_error(
+                    exercise=exercise.name,
+                    mistake=posture_result.get("mistake_code", "form_issue"),
+                    message=posture_message,
+                )
+
+            # Rep milestone events → Agent 1
+            if reps > prev_rep_count:
+                agent_system.on_rep_completed(exercise=exercise.name, rep_count=reps)
+                prev_rep_count = reps
+
+            # Legacy pyttsx3 voice (runs alongside Jarvis if not muted)
             if posture_message != "Good form" and posture_message != last_spoken_message:
                 voice.speak(posture_message)
                 last_spoken_message = posture_message
@@ -249,7 +355,7 @@ def main() -> None:
 
         draw_panel(
             frame,
-            title="AI Personal Trainer",
+            title="AI Personal Trainer  |  JARVIS Active",
             lines=[
                 f"Exercise: {exercise.display_name}",
                 f"Model prediction: {EXERCISE_CONFIGS[predicted_exercise_name].display_name if predicted_exercise_name in EXERCISE_CONFIGS else exercise.display_name}",
@@ -276,12 +382,32 @@ def main() -> None:
     cap.release()
     cv2.destroyAllWindows()
 
-    report = scorer.build_report()
+    # ── End session: trigger Agent 2 + Agent 3 ─────────────────────────
+    session_data = scorer.build_report()
+
+    # Save legacy JSON report
     report_path = Path(args.report_path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(json.dumps(report, indent=2))
-    print(f"Workout report saved to: {report_path}")
+    report_path.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
+    print(f"\nWorkout data saved to: {report_path}")
+
+    # Run multi-agent post-workout pipeline
+    print("\n🤖 Agents are analysing your session...")
+    agent_results = agent_system.finish(session_data)
+
+    # Print the full report and next-day plan
+    _print_post_workout_summary(agent_results)
+
+    # Save agent outputs alongside the legacy report
+    if agent_results.get("report", {}).get("text"):
+        agent_report_path = report_path.parent / "agent_report.md"
+        agent_report_path.write_text(agent_results["report"]["text"], encoding="utf-8")
+        print(f"📄 Full report saved to: {agent_report_path}")
+
+    if agent_results.get("plan", {}).get("text"):
+        plan_path = report_path.parent / "next_day_plan.md"
+        plan_path.write_text(agent_results["plan"]["text"], encoding="utf-8")
+        print(f"📅 Next-day plan saved to: {plan_path}")
 
 
 if __name__ == "__main__":

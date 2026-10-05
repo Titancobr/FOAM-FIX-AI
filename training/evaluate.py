@@ -34,7 +34,7 @@ def main():
         "TransformerBlock": TransformerBlock,
         "PositionalEncoding": PositionalEncoding,
     }
-    model = keras.models.load_model(args.model, custom_objects=custom_objects)
+    model = keras.models.load_model(args.model, custom_objects=custom_objects, compile=False)
     predictions = model.predict(X, verbose=0)
     predicted_labels = np.argmax(predictions, axis=1)
 

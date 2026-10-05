@@ -28,7 +28,7 @@ def build_model(
     reg = tf.keras.regularizers.l2(l2_reg) if l2_reg > 0 else None
 
     model = Sequential([
-        InputLayer(input_shape=input_shape),
+        InputLayer(shape=input_shape),
 
         # Block 1: Coarse temporal features
         LSTM(units_1, return_sequences=True, kernel_regularizer=reg),

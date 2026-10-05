@@ -10,7 +10,13 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=sqlite:///./data/formfix.db
-      - LLM_PROVIDER=local
+      # Ollama runs on the Mac host while this backend runs in Docker.
+      - LLM_PROVIDER=ollama
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - LLM_MODEL=qwen2.5:3b
+      - LLM_REALTIME_MODEL=qwen2.5:3b
+      - LLM_REPORT_MODEL=qwen2.5:3b
+      - LLM_VISION_MODEL=llava:7b
     volumes:
       # Persist user progress, workouts, and SQLite database
       - formfix_data:/app/green-formfix/backend/data
@@ -30,7 +36,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        VITE_API_URL: "http://localhost:8000"
+        VITE_API_URL: ""
     container_name: formfix-frontend
     restart: unless-stopped
     ports:

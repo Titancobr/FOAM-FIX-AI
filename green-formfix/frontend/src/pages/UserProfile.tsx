@@ -6,7 +6,7 @@ import { User, Flame, Trophy, Dumbbell, LogOut, ChevronRight, Check, RefreshCw }
 import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 interface ProgressSummary {
   days_worked_out: number;

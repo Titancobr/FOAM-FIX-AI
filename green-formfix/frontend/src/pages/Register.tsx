@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import heroImg from "@/assets/hero-fitness.jpg";
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 const Register = () => {
   const [email, setEmail] = useState("");
