@@ -1,4 +1,7 @@
 # FormFix AI Trainer - Windows PowerShell Launcher
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+Set-Location $ProjectRoot
+
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "        FORM-FIX AI Pose Trainer - PowerShell Launcher" -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan

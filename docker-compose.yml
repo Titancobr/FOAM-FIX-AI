@@ -2,7 +2,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: deployment/Dockerfile.backend
     container_name: formfix-backend
     restart: unless-stopped
     ports:
@@ -34,7 +34,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: deployment/Dockerfile.frontend
       args:
         VITE_API_URL: ""
     container_name: formfix-frontend

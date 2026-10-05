@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+cd /d "%~dp0\..\.."
 
 echo ========================================================
 echo         FORM-FIX AI Pose Trainer - Windows Launcher
@@ -69,7 +70,7 @@ echo  1. When your browser opens http://localhost:3000, allow camera access when
 echo  2. If you don't have an account yet, click "Register" to create one.
 echo  3. All trained AI models (.keras) are loaded and ready in the backend!
 echo.
-echo To STOP the application at any time, run: stop_windows.bat
+echo To STOP the application at any time, run: scripts\launch\stop_windows.bat
 echo or execute: docker compose down
 echo.
 pause

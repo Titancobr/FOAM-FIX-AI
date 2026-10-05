@@ -20,8 +20,8 @@ This guide makes it super easy to run FormFix on Windows with full AI posture tr
 
 ## How to Run FormFix (1-Click)
 
-1. **Double-click** `run_windows.bat` in the project root folder.
-   *(Alternatively, right click `run_windows.ps1` and select "Run with PowerShell")*
+1. **Double-click** `scripts/launch/run_windows.bat`.
+   *(Alternatively, right click `scripts/launch/run_windows.ps1` and select "Run with PowerShell")*
 2. The script will automatically:
    - Check that Docker is running.
    - Build and start the backend and frontend containers.
@@ -59,7 +59,7 @@ This guide makes it super easy to run FormFix on Windows with full AI posture tr
 ## How to Stop the App
 
 When you're finished with your workout:
-- Double-click **`stop_windows.bat`**
+- Double-click **`scripts/launch/stop_windows.bat`**
 - OR open Command Prompt in the folder and type:
   ```cmd
   docker compose down
@@ -71,7 +71,7 @@ All your workout stats, accounts, and progress are safely saved in a persistent 
 ## Troubleshooting
 
 - **"Docker Desktop is installed but not running"**:
-  Open Docker Desktop from the Windows Start menu and wait ~30 seconds for it to start up, then double-click `run_windows.bat` again.
+  Open Docker Desktop from the Windows Start menu and wait ~30 seconds for it to start up, then double-click `scripts/launch/run_windows.bat` again.
 - **Camera is not appearing in browser**:
   Check your Windows Settings: `Settings > Privacy & security > Camera` and ensure "Let desktop apps access your camera" and your browser (Chrome/Edge) have permission. Also make sure no other program (like Zoom or Teams) is using the webcam.
 - **Port 3000 or 8000 is already in use**:

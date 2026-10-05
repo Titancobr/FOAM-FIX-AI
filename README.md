@@ -157,18 +157,18 @@ The full platform (React frontend + FastAPI backend + MediaPipe/TensorFlow AI en
 ### Running on Windows (1-Click)
 
 1. Ensure **Docker Desktop** is installed and running.
-2. Double-click **`run_windows.bat`** (or execute `./run_windows.ps1` in PowerShell).
+2. Double-click **`scripts/launch/run_windows.bat`** (or execute `scripts/launch/run_windows.ps1` in PowerShell).
 3. The script will build and launch containers, then automatically open **`http://localhost:3000`** in your browser.
 4. Allow webcam access in your browser and start working out!
-5. To stop, run **`stop_windows.bat`** or `docker compose down`.
+5. To stop, run **`scripts/launch/stop_windows.bat`** or `docker compose down`.
 
-For detailed Windows setup steps and troubleshooting, see [WINDOWS_SETUP.md](file:///Users/syedahmed/AI-Trainer/WINDOWS_SETUP.md).
+For detailed Windows setup steps and troubleshooting, see [docs/WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md).
 
 ### Running on Mac / Linux
 
 ```bash
 # Start all services with 1 command:
-./run_mac_linux.sh
+./scripts/launch/run_mac_linux.sh
 
 # Or directly with Docker Compose:
 docker compose up --build -d
