@@ -10,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 import mlflow
 import mlflow.keras
+from sklearn.model_selection import train_test_split
 
 def load_dataset(npz_path):
     data = np.load(npz_path, allow_pickle=True)
@@ -17,8 +18,15 @@ def load_dataset(npz_path):
     y = data["y"].astype(np.int64)
     label_names = data["label_names"]
     num_classes = len(label_names)
-    y_cat = tf.keras.utils.to_categorical(y, num_classes)
-    return X, y_cat, num_classes
+    X_test, _, y_test, _ = train_test_split(
+        X,
+        y,
+        test_size=0.8,
+        random_state=42,
+        stratify=y,
+    )
+    y_test_cat = tf.keras.utils.to_categorical(y_test, num_classes)
+    return X_test, y_test_cat, num_classes
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate LSTM/BiLSTM models and log to MLflow")
