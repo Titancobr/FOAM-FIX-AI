@@ -1,5 +1,6 @@
 import argparse
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -88,6 +89,11 @@ def parse_args():
         default="models/exercise_lstm.keras",
         help="Output path for baseline LSTM model.",
     )
+    parser.add_argument(
+        "--mlflow-dir",
+        default=os.getenv("MLFLOW_TRACKING_URI", "mlruns"),
+        help="MLflow tracking URI or local tracking directory.",
+    )
     return parser.parse_args()
 
 
@@ -104,112 +110,118 @@ def compile_tuned_model(model, base_lr, warmup_epochs, total_epochs, batch_size,
 
 
 def main():
-    mlflow.set_tracking_uri('http://127.0.0.1:5000')
-    mlflow.tensorflow.autolog()
+    args = parse_args()
+    tracking_uri = args.mlflow_dir
+    if "://" not in tracking_uri:
+        tracking_uri = f"file://{Path(tracking_uri).absolute()}"
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment("ai_trainer_exercise_classification")
+    mlflow.tensorflow.autolog(log_models=True, exclusive=False)
 
-    with mlflow.start_run():
-        args = parse_args()
+    with mlflow.start_run(run_name="training"):
         mlflow.log_params(vars(args))
-    dataset_path = Path(args.dataset)
-    if not dataset_path.exists():
-        raise FileNotFoundError(
-            f"Processed dataset not found at {dataset_path}. Run training/preprocess_dataset.py first."
+        dataset_path = Path(args.dataset)
+        if not dataset_path.exists():
+            raise FileNotFoundError(
+                f"Processed dataset not found at {dataset_path}. Run training/preprocess_dataset.py first."
+            )
+
+        data = np.load(dataset_path, allow_pickle=True)
+        X = data["X"].astype(np.float32)
+        y = data["y"].astype(np.int64)
+        label_names = [str(label) for label in data["label_names"]]
+        num_classes = len(label_names)
+
+        logger.info("Loaded dataset: %d sequences, %d classes: %s", len(X), num_classes, label_names)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
         )
 
-    data = np.load(dataset_path, allow_pickle=True)
-    X = data["X"].astype(np.float32)
-    y = data["y"].astype(np.int64)
-    label_names = [str(label) for label in data["label_names"]]
-    num_classes = len(label_names)
+        class_weights = compute_class_weight(
+            class_weight="balanced",
+            classes=np.arange(num_classes),
+            y=y_train,
+        )
+        class_weight_map = {i: float(w) for i, w in enumerate(class_weights)}
 
-    logger.info("Loaded dataset: %d sequences, %d classes: %s", len(X), num_classes, label_names)
+        y_train_cat = to_categorical(y_train, num_classes)
+        y_test_cat = to_categorical(y_test, num_classes)
+        input_shape = (X.shape[1], X.shape[2])
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    class_weights = compute_class_weight(
-        class_weight="balanced",
-        classes=np.arange(num_classes),
-        y=y_train,
-    )
-    class_weight_map = {i: float(w) for i, w in enumerate(class_weights)}
-
-    y_train_cat = to_categorical(y_train, num_classes)
-    y_test_cat = to_categorical(y_test, num_classes)
-    input_shape = (X.shape[1], X.shape[2])
-
-    models_dir = Path("models")
-    models_dir.mkdir(parents=True, exist_ok=True)
-    import json
-    with open(models_dir / "label_names.json", "w") as f:
-        json.dump(label_names, f, indent=2)
+        models_dir = Path("models")
+        models_dir.mkdir(parents=True, exist_ok=True)
+        import json
+        with open(models_dir / "label_names.json", "w") as f:
+            json.dump(label_names, f, indent=2)
 
     # 1. Train Tuned BiLSTM
-    logger.info("=" * 50)
-    logger.info("Training Tuned BiLSTM Model (%d epochs)...", args.bilstm_epochs)
-    logger.info("=" * 50)
-    bilstm_model = build_bilstm(input_shape, num_classes)
-    bilstm_model = compile_tuned_model(
-        bilstm_model,
-        base_lr=5e-4,
-        warmup_epochs=3,
-        total_epochs=args.bilstm_epochs,
-        batch_size=args.batch_size,
-        num_train=len(X_train),
-        label_smoothing=0.1,
-    )
+        logger.info("=" * 50)
+        logger.info("Training Tuned BiLSTM Model (%d epochs)...", args.bilstm_epochs)
+        logger.info("=" * 50)
+        bilstm_model = build_bilstm(input_shape, num_classes)
+        bilstm_model = compile_tuned_model(
+            bilstm_model,
+            base_lr=5e-4,
+            warmup_epochs=3,
+            total_epochs=args.bilstm_epochs,
+            batch_size=args.batch_size,
+            num_train=len(X_train),
+            label_smoothing=0.1,
+        )
 
-    bilstm_callbacks = [
-        EarlyStopping(monitor="val_accuracy", patience=12, restore_best_weights=True, verbose=1),
-        ModelCheckpoint(args.output_bilstm, monitor="val_accuracy", save_best_only=True, verbose=1),
-    ]
+        bilstm_callbacks = [
+            EarlyStopping(monitor="val_accuracy", patience=12, restore_best_weights=True, verbose=1),
+            ModelCheckpoint(args.output_bilstm, monitor="val_accuracy", save_best_only=True, verbose=1),
+        ]
 
-    bilstm_history = bilstm_model.fit(
-        X_train,
-        y_train_cat,
-        epochs=args.bilstm_epochs,
-        batch_size=args.batch_size,
-        validation_data=(X_test, y_test_cat),
-        callbacks=bilstm_callbacks,
-        class_weight=class_weight_map,
-        verbose=1,
-    )
-    mlflow.log_metric('bilstm_val_accuracy', float(bilstm_history.history['val_accuracy'][-1]))
+        bilstm_history = bilstm_model.fit(
+            X_train,
+            y_train_cat,
+            epochs=args.bilstm_epochs,
+            batch_size=args.batch_size,
+            validation_data=(X_test, y_test_cat),
+            callbacks=bilstm_callbacks,
+            class_weight=class_weight_map,
+            verbose=1,
+        )
+        mlflow.log_metric("bilstm_val_accuracy", float(bilstm_history.history["val_accuracy"][-1]))
+        mlflow.log_artifact(args.output_bilstm, artifact_path="models")
 
     # 2. Train Tuned LSTM
-    logger.info("=" * 50)
-    logger.info("Training Tuned LSTM Model (%d epochs)...", args.lstm_epochs)
-    logger.info("=" * 50)
-    lstm_model = build_model(input_shape, num_classes)
-    lstm_model = compile_tuned_model(
-        lstm_model,
-        base_lr=5e-4,
-        warmup_epochs=3,
-        total_epochs=args.lstm_epochs,
-        batch_size=args.batch_size,
-        num_train=len(X_train),
-        label_smoothing=0.1,
-    )
+        logger.info("=" * 50)
+        logger.info("Training Tuned LSTM Model (%d epochs)...", args.lstm_epochs)
+        logger.info("=" * 50)
+        lstm_model = build_model(input_shape, num_classes)
+        lstm_model = compile_tuned_model(
+            lstm_model,
+            base_lr=5e-4,
+            warmup_epochs=3,
+            total_epochs=args.lstm_epochs,
+            batch_size=args.batch_size,
+            num_train=len(X_train),
+            label_smoothing=0.1,
+        )
 
-    lstm_callbacks = [
-        EarlyStopping(monitor="val_accuracy", patience=10, restore_best_weights=True, verbose=1),
-        ModelCheckpoint(args.output_lstm, monitor="val_accuracy", save_best_only=True, verbose=1),
-    ]
+        lstm_callbacks = [
+            EarlyStopping(monitor="val_accuracy", patience=10, restore_best_weights=True, verbose=1),
+            ModelCheckpoint(args.output_lstm, monitor="val_accuracy", save_best_only=True, verbose=1),
+        ]
 
-    lstm_history = lstm_model.fit(
-        X_train,
-        y_train_cat,
-        epochs=args.lstm_epochs,
-        batch_size=args.batch_size,
-        validation_data=(X_test, y_test_cat),
-        callbacks=lstm_callbacks,
-        class_weight=class_weight_map,
-        verbose=1,
-    )
-    mlflow.log_metric('lstm_val_accuracy', float(lstm_history.history['val_accuracy'][-1]))
+        lstm_history = lstm_model.fit(
+            X_train,
+            y_train_cat,
+            epochs=args.lstm_epochs,
+            batch_size=args.batch_size,
+            validation_data=(X_test, y_test_cat),
+            callbacks=lstm_callbacks,
+            class_weight=class_weight_map,
+            verbose=1,
+        )
+        mlflow.log_metric("lstm_val_accuracy", float(lstm_history.history["val_accuracy"][-1]))
+        mlflow.log_artifact(args.output_lstm, artifact_path="models")
 
-    logger.info("Completed training for BiLSTM and LSTM models.")
+        logger.info("Completed training for BiLSTM and LSTM models.")
 
 
 if __name__ == "__main__":

@@ -4,3 +4,4 @@ numpy
 streamlit
 pyttsx3
 scikit-learn
+mlflow>=2.14,<4

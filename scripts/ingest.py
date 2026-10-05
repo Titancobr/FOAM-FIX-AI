@@ -11,11 +11,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest raw pose data.")
-    parser.add_argument(
-        "--src",
-        default="https://example.com/pose-data.zip",
-        help="URL or local path to zip containing raw data",
-    )
+    parser.add_argument("--src", required=True, help="Local directory/archive or URL containing raw data")
     parser.add_argument(
         "--dest",
         default="data/raw",
@@ -27,6 +23,17 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
 
     src_path = Path(args.src)
+    if src_path.is_dir():
+        # Keep ingestion deterministic for local datasets and preserve class folders.
+        for item in src_path.iterdir():
+            target = dest / item.name
+            if item.is_dir():
+                shutil.copytree(item, target, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, target)
+        print(f"✅ Copied local dataset {src_path} → {dest}")
+        return
+
     if src_path.is_file():
         # local file – just unpack
         shutil.unpack_archive(str(src_path), str(dest))

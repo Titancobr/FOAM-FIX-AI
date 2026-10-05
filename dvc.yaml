@@ -1,0 +1,56 @@
+stages:
+  ingest:
+    cmd: python scripts/ingest.py --src ${ingestion.source} --dest ${paths.raw_data}
+    deps:
+      - scripts/ingest.py
+      - ${ingestion.source}
+    outs:
+      - ${paths.raw_data}
+
+  preprocess:
+    cmd: >-
+      python training/preprocess_dataset.py
+      --input-dir ${paths.raw_data}
+      --output ${paths.processed_data}
+      --sequence-length ${preprocessing.sequence_length}
+      --stride ${preprocessing.stride}
+      --max-sequences-per-class ${preprocessing.max_sequences_per_class}
+    deps:
+      - training/preprocess_dataset.py
+      - utils/config.py
+      - ${paths.raw_data}
+    outs:
+      - ${paths.processed_data}
+      - models/label_names.json
+
+  train:
+    cmd: >-
+      python training/train_lstm.py
+      --dataset ${paths.processed_data}
+      --bilstm-epochs ${epochs.bilstm}
+      --lstm-epochs ${epochs.lstm}
+      --batch-size ${batch_size}
+      --mlflow-dir ${paths.logs}
+    deps:
+      - training/train_lstm.py
+      - models/exercise_lstm.py
+      - models/posture_bilstm.py
+      - ${paths.processed_data}
+    outs:
+      - models/exercise_bilstm.keras
+      - models/exercise_lstm.keras
+
+  evaluate:
+    cmd: >-
+      python scripts/evaluate.py
+      --lstm models/exercise_lstm.keras
+      --bilstm models/exercise_bilstm.keras
+      --test-data ${paths.processed_data}
+      --mlflow-dir ${paths.logs}
+    deps:
+      - scripts/evaluate.py
+      - models/exercise_lstm.keras
+      - models/exercise_bilstm.keras
+      - ${paths.processed_data}
+    metrics:
+      - ${evaluation.metrics}

@@ -6,3 +6,4 @@ pyttsx3
 scikit-learn
 tensorflow-macos
 tensorflow-metal
+mlflow>=2.14,<4

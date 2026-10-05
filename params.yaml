@@ -12,7 +12,19 @@ label_smoothing: 0.1
 
 # Paths (relative to repository root)
 paths:
+  source_data: "dataset/raw_videos"
   raw_data: "data/raw"
-  processed_data: "data/processed"
+  processed_data: "data/processed/exercise_sequences.npz"
   model_dir: "models"
   logs: "mlruns"
+
+ingestion:
+  source: "dataset/raw_videos"
+
+preprocessing:
+  sequence_length: 30
+  stride: 15
+  max_sequences_per_class: 450
+
+evaluation:
+  metrics: "metrics/eval.json"
