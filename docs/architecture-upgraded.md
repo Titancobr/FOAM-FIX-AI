@@ -21,25 +21,25 @@ flowchart TB
     end
 
     subgraph WORKOUT[Workout intelligence]
-        POSE[MediaPipe Pose<br/>33 landmarks × x,y,z,visibility]
+        POSE["MediaPipe Pose<br/>33 landmarks × x,y,z,visibility"]
         FEAT[Normalization + joint-angle features]
         BUFFER[30-frame sequence buffer]
-        ENSEMBLE[Weighted exercise ensemble<br/>BiLSTM 0.55 · LSTM 0.25 · Transformer 0.20]
-        RULES[Posture rule engine<br/>thresholds + severity + mistake codes]
-        REPS[Rep counter<br/>smoothing + dynamic thresholds + state machine]
-        SCORE[Workout scorer<br/>quality, reps and mistakes]
+        ENSEMBLE["Weighted exercise ensemble<br/>BiLSTM 0.55 · LSTM 0.25 · Transformer 0.20"]
+        RULES["Posture rule engine<br/>thresholds + severity + mistake codes"]
+        REPS["Rep counter<br/>smoothing + dynamic thresholds + state machine"]
+        SCORE["Workout scorer<br/>quality, reps and mistakes"]
     end
 
     subgraph NUTRITION[Nutrition intelligence]
-        VISION[Ollama vision model<br/>llava:7b]
-        HINTS[Client context<br/>food hint · serving hint · packaging · portions · eaten-out]
-        GUIDE[Ollama guidance model<br/>qwen2.5:3b]
-        NUTRRES[Range + macro estimate<br/>recognized foods + confidence + provenance]
+        VISION["Ollama vision model<br/>llava:7b"]
+        HINTS["Client context<br/>food hint · serving hint · packaging · portions · eaten-out"]
+        GUIDE["Ollama guidance model<br/>qwen2.5:3b"]
+        NUTRRES["Range + macro estimate<br/>recognized foods + confidence + provenance"]
     end
 
     subgraph COACH[Coaching and persistence]
-        LLM[Ollama coaching/report layer<br/>qwen2.5:3b / qwen2.5:7b]
-        DB[(SQLite / SQLAlchemy<br/>users · meals · sessions · progress)]
+        LLM["Ollama coaching/report layer<br/>qwen2.5:3b / qwen2.5:7b"]
+        DB[("SQLite / SQLAlchemy<br/>users · meals · sessions · progress")]
     end
 
     U --> CAM & SCAN & DASH
@@ -116,11 +116,11 @@ flowchart LR
     RAW[dataset/raw_videos/<label>]
     PRE[preprocess_dataset.py]
     MP[MediaPipe pose extraction]
-    NORM[Normalize around hip center<br/>scale by torso size]
+    NORM["Normalize around hip center<br/>scale by torso size"]
     ANG[Joint-angle and landmark features]
-    WIN[Sliding windows<br/>30 frames · stride 15]
-    NPZ[exercise_sequences.npz<br/>X: T×132 · y · label_names]
-    SPLIT[Stratified train/validation split<br/>class weights]
+    WIN["Sliding windows<br/>30 frames · stride 15"]
+    NPZ["exercise_sequences.npz<br/>X: T×132 · y · label_names"]
+    SPLIT["Stratified train/validation split<br/>class weights"]
 
     RAW --> PRE --> MP --> NORM --> ANG --> WIN --> NPZ --> SPLIT
 
@@ -128,11 +128,11 @@ flowchart LR
     SPLIT --> BILSTM[BiLSTM training]
     SPLIT --> TRANS[Transformer training]
 
-    LSTM --> E1[Accuracy · loss · F1<br/>models/exercise_lstm.keras]
-    BILSTM --> E2[Accuracy · loss · F1<br/>models/exercise_bilstm.keras]
-    TRANS --> E3[Accuracy · loss · F1<br/>models/posture_transformer.keras]
+    LSTM --> E1["Accuracy · loss · F1<br/>models/exercise_lstm.keras"]
+    BILSTM --> E2["Accuracy · loss · F1<br/>models/exercise_bilstm.keras"]
+    TRANS --> E3["Accuracy · loss · F1<br/>models/posture_transformer.keras"]
 
-    E1 & E2 & E3 --> TEST[Held-out evaluation<br/>confusion matrix · top-1/top-3]
+    E1 & E2 & E3 --> TEST["Held-out evaluation<br/>confusion matrix · top-1/top-3"]
     TEST --> REG[Model registry + label_names.json]
     REG --> SERVE[MultiModelExercisePredictor]
 ```
@@ -144,10 +144,10 @@ flowchart LR
 ```mermaid
 flowchart LR
     FRAME[RGB camera frame] --> MP[MediaPipe Pose]
-    MP --> LM[33 landmarks<br/>(x,y,z,visibility)]
+    MP --> LM["33 landmarks<br/>(x,y,z,visibility)"]
     LM --> CENTER[Hip-center translation]
     CENTER --> SCALE[Torso-size scaling]
-    SCALE --> ANGLES[Angles<br/>knee · hip · elbow · shoulder]
+    SCALE --> ANGLES["Angles<br/>knee · hip · elbow · shoulder"]
     SCALE --> LANDMARKS[Normalized landmarks]
     ANGLES & LANDMARKS --> VECTOR[132-value frame vector]
     VECTOR --> SEQ[30-frame sequence]
@@ -157,46 +157,46 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    I[Input<br/>30 × 132] --> L1[LSTM 256<br/>return_sequences=true]
+    I["Input<br/>30 × 132"] --> L1["LSTM 256<br/>return_sequences=true"]
     L1 --> N1[LayerNorm] --> D1[Dropout 0.30]
-    D1 --> L2[LSTM 128<br/>return_sequences=true]
+    D1 --> L2["LSTM 128<br/>return_sequences=true"]
     L2 --> N2[LayerNorm] --> D2[Dropout 0.25]
     D2 --> L3[LSTM 64]
     L3 --> N3[LayerNorm] --> D3[Dropout 0.20]
     D3 --> H1[Dense 128 GELU] --> H2[LayerNorm + Dropout 0.15]
     H2 --> H3[Dense 64 GELU + Dropout 0.10]
-    H3 --> O[Dense num_classes<br/>Softmax]
+    H3 --> O["Dense num_classes<br/>Softmax"]
 ```
 
 ### 4.3 BiLSTM primary classifier
 
 ```mermaid
 flowchart LR
-    I[Input<br/>30 × 132] --> B1[Bidirectional LSTM 256×2]
+    I["Input<br/>30 × 132"] --> B1["Bidirectional LSTM 256×2"]
     B1 --> N1[LayerNorm + Dropout 0.35]
     N1 --> B2[Bidirectional LSTM 128×2]
     B2 --> N2[LayerNorm + Dropout 0.30]
     N2 --> B3[Bidirectional LSTM 64×2]
     B3 --> N3[LayerNorm + Dropout 0.20]
-    N3 --> POOL[Global Average Pool +<br/>Global Max Pool → Concatenate]
-    POOL --> D1[Dense 256 GELU<br/>LayerNorm + Dropout 0.20]
-    D1 --> D2[Dense 128 GELU<br/>Dropout 0.15]
-    D2 --> O[Dense num_classes<br/>Softmax]
+    N3 --> POOL["Global Average Pool +<br/>Global Max Pool → Concatenate"]
+    POOL --> D1["Dense 256 GELU<br/>LayerNorm + Dropout 0.20"]
+    D1 --> D2["Dense 128 GELU<br/>Dropout 0.15"]
+    D2 --> O["Dense num_classes<br/>Softmax"]
 ```
 
 ### 4.4 Transformer comparison model
 
 ```mermaid
 flowchart LR
-    I[Input<br/>30 × 132] --> P[Dense projection 128]
+    I["Input<br/>30 × 132"] --> P["Dense projection 128"]
     P --> POS[Sinusoidal positional encoding]
     POS --> T1[Transformer block ×4]
-    T1 --> ATTN[8-head self-attention<br/>pre-LayerNorm + residual]
-    ATTN --> FFN[Feed-forward 256<br/>GELU + dropout + residual]
+    T1 --> ATTN["8-head self-attention<br/>pre-LayerNorm + residual"]
+    ATTN --> FFN["Feed-forward 256<br/>GELU + dropout + residual"]
     FFN --> POOL[Global average + max pooling]
-    POOL --> D1[Dense 128 GELU<br/>LayerNorm + Dropout]
+    POOL --> D1["Dense 128 GELU<br/>LayerNorm + Dropout"]
     D1 --> D2[Dense 64 GELU + Dropout]
-    D2 --> O[Dense num_classes<br/>Softmax]
+    D2 --> O["Dense num_classes<br/>Softmax"]
 ```
 
 ## 5. Deterministic movement engines and Ollama boundary
@@ -205,15 +205,15 @@ flowchart LR
 flowchart TB
     F[Frame features + predicted exercise]
     F --> SM[Angle smoothing]
-    SM --> RANGE[Observed movement range<br/>and dynamic thresholds]
-    RANGE --> STATE[State machine<br/>start → contracted → start]
+    SM --> RANGE["Observed movement range<br/>and dynamic thresholds"]
+    RANGE --> STATE["State machine<br/>start → contracted → start"]
     STATE --> REP[Count only completed reps]
 
     F --> RULE[Exercise-specific posture rules]
     RULE --> MIST[Stable mistake code + severity]
 
     MIST --> LOCAL[Immediate local feedback]
-    MIST --> GATE{Repeated severe<br/>mistake?}
+    MIST --> GATE{"Repeated severe<br/>mistake?"}
     GATE -->|No| LOCAL
     GATE -->|Yes| OLLAMA[Ollama qwen2.5:3b]
     OLLAMA --> NATURAL[Natural-language correction]
