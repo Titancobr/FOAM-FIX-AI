@@ -1,13 +1,13 @@
 \documentclass[12pt,a4paper]{report}
 \usepackage[margin=1in]{geometry}
 \usepackage{setspace}
-\usepackage{titlesec}
 \usepackage{hyperref}
-\usepackage{enumitem}
+\usepackage{graphicx}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \onehalfspacing
 \begin{document}
+\setcounter{secnumdepth}{0}
 
 \title{FormFix AI\\Real-Time Exercise Pose Detection, Rep Counting, and Posture Correction System}
 \author{Syed Ahmed}
@@ -89,26 +89,28 @@ The proposed FormFix AI system builds on the most useful ideas present across th
 \chapter{Proposed System}
 
 \section{3.1 System Overview}
-The proposed system is a hybrid AI architecture composed of perception, temporal classification, movement evaluation, feedback generation, and persistence layers. The user stands in front of a webcam and performs a supported exercise. The camera captures video frames, which are passed to the pose estimation module. The pose estimator extracts full-body landmarks and returns a structured representation of the user’s body in each frame. These landmarks are then converted into meaningful angle-based features such as elbow angle, shoulder angle, knee angle, and hip angle.
+The proposed system is a hybrid AI architecture composed of perception, temporal classification, movement evaluation, feedback generation, nutrition analysis, and persistence layers. The user stands in front of a webcam and performs a supported exercise. The camera captures video frames, which are passed to the pose estimation module. The pose estimator extracts 33 full-body landmarks, each containing spatial coordinates and visibility, and returns a structured representation of the user’s body in each frame. These landmarks are normalized around the hip centre and converted into meaningful angle-based features such as elbow angle, shoulder angle, knee angle, and hip angle.
 
 The extracted frame-wise features are stored in a short temporal sequence buffer. This buffer is used by the exercise classification model, primarily a BiLSTM, to identify which exercise is being performed. Once the exercise is known, the system activates exercise-specific rep counting and posture correction logic. The rep counter tracks motion phases such as up and down, verifies full transitions, and increments the repetition count when a complete movement is detected. Simultaneously, the posture correction engine compares the observed joint angles against exercise-specific movement expectations and flags mistakes when the form deviates from expected motion patterns.
 
-The correction output is then passed to a user-facing feedback layer. For fast real-time guidance, local posture rules are used directly. For more natural and friendly phrasing, an optional local large language model is used to convert the technical mistake information into short coach-like cues. At the end of the exercise, the system produces a detailed report containing total repetitions, perfect repetitions, corrected repetitions, frequent mistakes, and recommendations for improvement. The workout progress is finally stored in a SQL-based backend for later review.
+The correction output is then passed to a user-facing feedback layer. For fast real-time guidance, local posture rules are used directly. The current implementation uses a weighted ensemble consisting of BiLSTM (0.55), LSTM (0.25), and Transformer (0.20), with probability smoothing and confidence hysteresis. For more natural and friendly phrasing, Ollama is used selectively to convert technical mistake information into short coach-like cues. At the end of the exercise, the system produces a detailed report containing total repetitions, perfect repetitions, corrected repetitions, frequent mistakes, and recommendations for improvement. The workout progress is finally stored in a SQL-based backend for later review.
+
+The same backend also provides a nutrition scanner. The user uploads a meal image and may supply a food hint, serving hint, packaging or nutrition-label hint, portion count, restaurant-style flag, and profile context. Ollama's vision model proposes visible food categories, while the guidance model combines those visual candidates with the user-provided information before estimating calories, macronutrients, ranges, assumptions, and confidence. The user-provided serving and dish information is therefore part of the decision input rather than decorative interface text.
 
 \section{3.2 High-Level Architecture}
 The complete system can be divided into the following functional layers:
 
-\noindent\textbullet\ Input Layer  
-   Webcam captures the live video stream from the user.
+\noindent\textbullet\ Presentation and API Layer  
+   A React/Vite frontend sends camera frames, meal images, and client-provided context to FastAPI routes.
 
 \noindent\textbullet\ Pose Estimation Layer  
    MediaPipe Pose extracts body landmarks and generates a skeleton representation.
 
 \noindent\textbullet\ Feature Extraction Layer  
-   The system computes relevant joint angles and derived motion features from the landmarks.
+   The system normalizes landmarks and computes relevant joint angles and derived motion features from each frame.
 
 \noindent\textbullet\ Temporal Classification Layer  
-   LSTM, BiLSTM, and Transformer models are used to learn motion sequences and predict exercise classes.
+   A smoothed weighted ensemble combines the LSTM baseline, primary BiLSTM, and Transformer comparison model to predict exercise classes.
 
 \noindent\textbullet\ Repetition Counting Layer  
    Exercise-specific logic tracks the movement cycle and counts completed repetitions.
@@ -117,10 +119,19 @@ The complete system can be divided into the following functional layers:
    Angle-based rules identify form deviations and determine the most relevant mistake.
 
 \noindent\textbullet\ Natural Coaching Layer  
-   A local LLM optionally rephrases technical corrections into human-like trainer feedback.
+   Ollama rephrases repeated severe corrections and creates session reports; the low-latency form decision remains local.
+
+\noindent\textbullet\ Nutrition Intelligence Layer  
+   Ollama vision identifies candidate foods and an Ollama guidance model combines them with hints, portions, labels, and restaurant context.
 
 \noindent\textbullet\ Reporting and Persistence Layer  
-   Session results, progress status, completed exercises, skipped exercises, and reports are stored through backend APIs and a database.
+   Session results, meal estimates, progress status, completed exercises, skipped exercises, and reports are stored through backend APIs and a SQL database.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{compressed_assets/new-overall-architecture.png}
+\caption{Updated overall architecture including workout inference, nutrition scanning, client hints, Ollama, and persistence.}
+\end{figure}
 
 \section{3.3 Architecture of the Models Used}
 
@@ -131,31 +142,50 @@ MediaPipe Pose is used as the front-end perception model. It accepts each camera
 The raw landmark coordinates are transformed into angle-based features because exercise correctness is more naturally described through joint mechanics than through absolute coordinate positions. For example, elbow flexion is meaningful for bicep curls and push-ups, knee angle is meaningful for squats, and shoulder angle is meaningful for lateral raises. This feature engineering stage produces a more interpretable and compact sequence representation than raw image pixels.
 
 \subsection{3.3.3 Baseline LSTM Model}
-The baseline LSTM model is a sequential neural network composed of two LSTM layers, dropout layers, a dense hidden layer, and a softmax output. The architecture is:
+The baseline LSTM model is the lightweight comparison model. The implementation uses three recurrent stages followed by normalized dense layers:
 
-- LSTM(128, return_sequences=True)  
-- Dropout(0.3)  
-- LSTM(64)  
-- Dropout(0.3)  
-- Dense(64, activation="relu")  
-- Dense(num_classes, activation="softmax")
+- LSTM(256, return\_sequences=True), LayerNorm, Dropout(0.30)  
+- LSTM(128, return\_sequences=True), LayerNorm, Dropout(0.25)  
+- LSTM(64), LayerNorm, Dropout(0.20)  
+- Dense(128, activation="GELU"), LayerNorm, Dropout(0.15)  
+- Dense(64, activation="GELU"), Dropout(0.10)  
+- Dense(num\_classes, activation="softmax")
 
 This model serves as a baseline for sequence classification. It learns the temporal evolution of exercise motion from the input feature sequences. It is useful as a benchmark because LSTM is a classic and widely accepted model for time-series classification.
 
-\subsection{3.3.4 BiLSTM Model}
-The BiLSTM model extends the LSTM architecture by processing the sequence in both forward and backward directions. Its architecture is:
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.96\textwidth]{compressed_assets/lstmfig.png}
+\caption{Baseline LSTM model figure.}
+\end{figure}
 
-- Bidirectional(LSTM(128, return_sequences=True))  
-- Dropout(0.3)  
-- Bidirectional(LSTM(64))  
-- Dropout(0.3)  
-- Dense(64, activation="relu")  
-- Dense(num_classes, activation="softmax")
+\subsection{3.3.4 BiLSTM Model}
+The BiLSTM model extends the LSTM architecture by processing the sequence in both forward and backward directions. The implemented architecture is:
+
+- Bidirectional(LSTM(256, return\_sequences=True)), LayerNorm, Dropout(0.35)  
+- Bidirectional(LSTM(128, return\_sequences=True)), LayerNorm, Dropout(0.30)  
+- Bidirectional(LSTM(64)), LayerNorm, Dropout(0.20)  
+- Global average pooling and global max pooling, concatenated  
+- Dense(256, activation="GELU"), LayerNorm, Dropout(0.20)  
+- Dense(128, activation="GELU"), Dropout(0.15)  
+- Dense(num\_classes, activation="softmax")
 
 This is the main classification model used in the project. It was selected because exercise motion contains temporal structure that benefits from richer context. BiLSTM often performs better than a single-direction LSTM on medium-sized landmark-based datasets because it captures more sequence information without becoming too computationally expensive.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.96\textwidth]{compressed_assets/bilstmfig.png}
+\caption{Bidirectional LSTM model figure.}
+\end{figure}
+
 \subsection{3.3.5 Transformer Model}
-The Transformer comparison model uses self-attention rather than recurrence. Its architecture includes a Transformer block with multi-head attention, feed-forward layers, dropout, normalization, global average pooling, and a softmax classifier. It is useful for research comparison because attention-based models are modern and powerful for sequence learning. However, they generally require more data and tuning. For this reason, the Transformer is included to strengthen the academic value of the project and enable comparison with recurrent models, but it is not the default real-time inference model.
+The Transformer comparison model uses self-attention rather than recurrence. The input is projected to 128 dimensions, augmented with sinusoidal positional encoding, and passed through four pre-normalized Transformer blocks. Each block uses eight-head self-attention, a 256-unit feed-forward network, dropout, and residual connections. Global average and maximum pooling are concatenated before Dense(128), Dense(64), and the softmax output. In the current runtime it is part of the ensemble, but it is evaluated less frequently than the LSTM and BiLSTM to control latency.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.96\textwidth]{compressed_assets/transformerfig.png}
+\caption{Transformer comparison model figure.}
+\end{figure}
 
 \subsection{3.3.6 Rep Counting Engine}
 Rep counting is not performed by a separate deep learning model. Instead, it is implemented using angle transitions, smoothing, dynamic thresholds, and movement stage logic. Each supported exercise has a target metric such as average elbow angle or average shoulder angle. The rep counter uses:
@@ -179,8 +209,11 @@ The posture correction engine is rule-based. It receives the detected exercise a
 
 This approach is computationally efficient and clinically interpretable compared with a black-box posture-quality classifier.
 
-\subsection{3.3.8 Local LLM Coaching Layer}
-The local LLM layer is not used as the primary posture detector. Instead, it acts as a natural-language explanation layer. It converts technical mistake codes into trainer-like voice cues and richer post-exercise reports. This design allows the system to remain real-time because the actual biomechanical decision is made locally by the rule engine. The LLM is only used to improve communication quality and end-of-exercise explanation.
+\subsection{3.3.8 Nutrition Scanner Models}
+The nutrition scanner uses two separate Ollama calls with different responsibilities. The vision model, configured as \texttt{llava:7b}, receives the meal image and returns constrained candidate food categories instead of directly inventing a complete nutrient table. The guidance model, configured as \texttt{qwen2.5:3b}, receives those candidates together with the food hint, serving hint, portion count, packaging or label hint, restaurant-style flag, and user context. It returns a structured estimate containing calories, protein, carbohydrates, fat, a likely range, an itemized breakdown, assumptions, and confidence. A nutrition-label image can provide stronger evidence than an ordinary meal photograph. These values are estimates and should not be presented as measured nutrition.
+
+\subsection{3.3.9 Local LLM Coaching Layer}
+The local LLM layer is not used as the primary posture detector. Instead, it acts as a natural-language explanation layer. It converts technical mistake codes into trainer-like voice cues and richer post-exercise reports. This design allows the system to remain real-time because the actual biomechanical decision is made locally by the rule engine. Ollama is optional and local; if it is unavailable or too slow, deterministic local feedback is returned instead of blocking the workout loop.
 
 \section{3.4 Why These Models Were Used}
 Each model and component in the project has a specific role. MediaPipe Pose is used because real-time skeleton extraction is a prerequisite for any posture-aware exercise system. LSTM is used as a standard sequential baseline model. BiLSTM is used as the primary exercise classifier because it models temporal motion more effectively in both directions. Transformer is used as an advanced comparison model with strong sequence-learning potential. The rep counter and posture rule engine are implemented separately because repetition counting and posture correction require explicit and stable motion logic rather than only classification. Finally, the LLM layer is used because users respond better to human-like guidance than to raw technical labels.
@@ -196,6 +229,7 @@ The major modules of the proposed system are:
 \noindent\textbullet\ Rep counting module  
 \noindent\textbullet\ Posture correction and voice feedback module  
 \noindent\textbullet\ Exercise report generation module  
+\noindent\textbullet\ Meal image, nutrition-label, hint, and serving-aware nutrition module  
 \noindent\textbullet\ User progress tracking and database storage module
 
 
@@ -325,10 +359,16 @@ The project uses several practical data structures:
 These choices make the system efficient, interpretable, and easy to maintain.
 
 \section{5.4 Training Implementation}
-The training implementation is written in Python using TensorFlow and Keras. The processed dataset is loaded using NumPy. The data is split into training and validation sets using `train_test_split`. Class weights are computed to reduce the impact of dataset imbalance. Two sequential models are trained directly: the BiLSTM model and the baseline LSTM model. Early stopping and learning-rate reduction callbacks are used to improve generalization and prevent unnecessary overtraining. The final models are saved in Keras format for later inference.
+The training implementation is written in Python using TensorFlow and Keras. The processed dataset is loaded using NumPy. The preprocessing pipeline extracts MediaPipe landmarks, normalizes them around the hip centre, creates 30-frame windows with a stride of 15, and saves an \texttt{.npz} dataset containing 132 values per frame. The data is split using a stratified train/validation procedure and class weights reduce the effect of imbalance. The BiLSTM, baseline LSTM, and Transformer are trained with label smoothing, warmup/cosine learning-rate scheduling, early stopping, and checkpointing. The final Keras models and label registry are loaded by the inference ensemble.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{compressed_assets/new-training-architecture.png}
+\caption{Updated training architecture from raw videos to model registry.}
+\end{figure}
 
 \section{5.5 Real-Time Inference Implementation}
-During real-time use, the system captures video frames from the webcam, extracts landmarks through MediaPipe, computes current angles, and optionally updates a short sequence buffer for the classifier. The predicted exercise activates the corresponding rep counter profile and posture correction rules. The UI then shows exercise name, reps, stage, and the latest coach cue. The frontend is designed to keep the user visible while the analysis remains smooth.
+During real-time use, the system captures video frames from the webcam, extracts landmarks through MediaPipe, computes current angles, and updates a short sequence buffer for the classifier. The weighted ensemble combines BiLSTM, LSTM, and Transformer probabilities with smoothing and confidence hysteresis. The predicted exercise activates the corresponding rep counter profile and posture correction rules. The UI then shows exercise name, reps, stage, confidence, and the latest coach cue. The frontend is designed to keep the user visible while the analysis remains smooth.
 
 \section{5.6 Frontend and Backend}
 The frontend is built using React and Vite. It provides workout selection, exercise pages, camera mode, and progress display. The backend is built using FastAPI and acts as the bridge between the UI, database, and real-time AI functions. It handles:
@@ -351,6 +391,9 @@ These entities allow the system to track whether a user completed or skipped an 
 
 \section{5.8 Voice and Report Generation}
 Voice correction is generated through browser-based speech synthesis in the frontend. To avoid excessive repetition, the system uses cooldown logic so that corrections are spoken only when useful. The report generation pipeline aggregates exercise performance data and optionally uses a local LLM to create a more natural summary. This improves user comprehension without sacrificing the speed of the posture analysis loop.
+
+\section{5.9 Nutrition Scan Implementation}
+The nutrition endpoint accepts a meal image, an optional nutrition-label image, and structured client context. The context includes food and serving hints, portion count, packaging information, whether the meal was eaten outside, and relevant profile data. The vision stage uses Ollama \texttt{llava:7b} to identify candidate foods. The estimation stage uses Ollama \texttt{qwen2.5:3b} to combine the candidates with the supplied context and return structured calories, protein, carbohydrates, fat, a range, itemized food estimates, assumptions, confidence, and model provenance. A nutrition label or confirmed serving size is treated as stronger evidence than a visual guess. The result is shown to the user for confirmation before it is added to the meal history.
 
 
 \chapter{Results and Performance Analysis}
@@ -521,6 +564,440 @@ Include the following in the appendix:
 \noindent\textbullet\ Frontend camera UI screenshot  
 \noindent\textbullet\ Workout report UI screenshot
 
+\clearpage
+\section*{Appendix Screenshots and Figures}
+
+The following screenshots are retained from the previous report version and provide visual evidence of the workout interface, camera module, and training/evaluation workflow.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{compressed_assets/previous-report-ui.png}
+\caption{Previous report workout and camera interface screenshots.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{compressed_assets/previous-report-training.png}
+\caption{Previous report training output screenshot.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{compressed_assets/previous-report-evaluation.png}
+\caption{Previous report Transformer training and evaluation commands.}
+\end{figure}
+
+\clearpage
+\section*{Complete Image Record}
+
+The remaining image assets from the previous report are included here so that the revised document retains the complete visual evidence set.
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-000.jpg}
+\par\small\textit{Extracted image asset original-000 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-001.jpg}
+\par\small\textit{Extracted image asset original-001 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-002.jpg}
+\par\small\textit{Extracted image asset original-002 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-003.jpg}
+\par\small\textit{Extracted image asset original-003 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-004.jpg}
+\par\small\textit{Extracted image asset original-004 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-005.jpg}
+\par\small\textit{Extracted image asset original-005 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-006.jpg}
+\par\small\textit{Extracted image asset original-006 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-007.jpg}
+\par\small\textit{Extracted image asset original-007 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-008.jpg}
+\par\small\textit{Extracted image asset original-008 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-009.jpg}
+\par\small\textit{Extracted image asset original-009 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-010.jpg}
+\par\small\textit{Extracted image asset original-010 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-011.jpg}
+\par\small\textit{Extracted image asset original-011 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-012.jpg}
+\par\small\textit{Extracted image asset original-012 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-013.jpg}
+\par\small\textit{Extracted image asset original-013 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-014.jpg}
+\par\small\textit{Extracted image asset original-014 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-015.jpg}
+\par\small\textit{Extracted image asset original-015 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-016.jpg}
+\par\small\textit{Extracted image asset original-016 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-017.jpg}
+\par\small\textit{Extracted image asset original-017 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-018.jpg}
+\par\small\textit{Extracted image asset original-018 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-019.jpg}
+\par\small\textit{Extracted image asset original-019 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-020.jpg}
+\par\small\textit{Extracted image asset original-020 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-021.jpg}
+\par\small\textit{Extracted image asset original-021 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-022.jpg}
+\par\small\textit{Extracted image asset original-022 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-023.jpg}
+\par\small\textit{Extracted image asset original-023 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-024.jpg}
+\par\small\textit{Extracted image asset original-024 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-025.jpg}
+\par\small\textit{Extracted image asset original-025 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-026.jpg}
+\par\small\textit{Extracted image asset original-026 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-027.jpg}
+\par\small\textit{Extracted image asset original-027 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-028.jpg}
+\par\small\textit{Extracted image asset original-028 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-029.jpg}
+\par\small\textit{Extracted image asset original-029 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-030.jpg}
+\par\small\textit{Extracted image asset original-030 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-031.jpg}
+\par\small\textit{Extracted image asset original-031 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-032.jpg}
+\par\small\textit{Extracted image asset original-032 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-033.jpg}
+\par\small\textit{Extracted image asset original-033 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-034.jpg}
+\par\small\textit{Extracted image asset original-034 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-035.jpg}
+\par\small\textit{Extracted image asset original-035 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-036.jpg}
+\par\small\textit{Extracted image asset original-036 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-037.jpg}
+\par\small\textit{Extracted image asset original-037 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-038.jpg}
+\par\small\textit{Extracted image asset original-038 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-039.jpg}
+\par\small\textit{Extracted image asset original-039 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-040.jpg}
+\par\small\textit{Extracted image asset original-040 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-041.jpg}
+\par\small\textit{Extracted image asset original-041 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-042.jpg}
+\par\small\textit{Extracted image asset original-042 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-043.jpg}
+\par\small\textit{Extracted image asset original-043 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-044.jpg}
+\par\small\textit{Extracted image asset original-044 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-045.jpg}
+\par\small\textit{Extracted image asset original-045 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-046.jpg}
+\par\small\textit{Extracted image asset original-046 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-047.jpg}
+\par\small\textit{Extracted image asset original-047 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-048.jpg}
+\par\small\textit{Extracted image asset original-048 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-049.jpg}
+\par\small\textit{Extracted image asset original-049 from the original report.}
+\end{center}
+
+\begin{center}
+\centering
+\includegraphics[width=0.90\textwidth,height=0.72\textheight,keepaspectratio]{compressed_assets/original-050.jpg}
+\par\small\textit{Extracted image asset original-050 from the original report.}
+\end{center}
+
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/archfig.png}
+\caption{Existing overall architecture figure.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/accfig.png}
+\caption{Training accuracy plot.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/lossfig.png}
+\caption{Training loss plot.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/cmfig.png}
+\caption{Confusion matrix.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/lstmtrainlog.jpg}
+\caption{LSTM/BiLSTM training log.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/transformertrainlog.jpg}
+\caption{Transformer training log.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/lstmfig.png}
+\caption{LSTM architecture figure.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/bilstmfig.png}
+\caption{BiLSTM architecture figure.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{compressed_assets/transformerfig.png}
+\caption{Transformer architecture figure.}
+\end{figure}
+
+\clearpage
+\section*{Editable Mermaid Architecture Source}
+
+The following source can be pasted into Mermaid-compatible editors to regenerate the upgraded diagrams.
+
+\begin{verbatim}
+flowchart TB
+    UI[React/Vite UI] --> API[FastAPI routes]
+    API --> W[Workout inference]
+    API --> N[Nutrition scan]
+    W --> P[MediaPipe Pose]
+    P --> F[Normalized landmarks and joint angles]
+    F --> B[30-frame sequence buffer]
+    B --> E[Weighted ensemble]
+    E --> C[BiLSTM .55 + LSTM .25 + Transformer .20]
+    F --> R[Posture rules]
+    F --> X[Smoothed rep state machine]
+    C --> S[Workout score and confidence]
+    R --> S
+    X --> S
+    S --> L[Ollama coaching only for severe repeated issues]
+    N --> V[Ollama llava:7b vision]
+    N --> H[Food hint, serving hint, portions, labels]
+    V --> G[Ollama qwen2.5:3b guidance]
+    H --> G
+    G --> M[Calories, macros, range, breakdown, confidence]
+    S --> DB[(SQL progress database)]
+    M --> DB
+\end{verbatim}
+
+\begin{verbatim}
+flowchart LR
+    RAW[Raw exercise videos] --> MP[MediaPipe extraction]
+    MP --> NORM[Hip-centred and torso-scaled landmarks]
+    NORM --> WIN[30-frame windows, stride 15]
+    WIN --> NPZ[exercise_sequences.npz]
+    NPZ --> LSTM[LSTM training]
+    NPZ --> BILSTM[BiLSTM training]
+    NPZ --> TRANS[Transformer training]
+    LSTM --> TEST[Validation, test, F1, confusion matrix]
+    BILSTM --> TEST
+    TRANS --> TEST
+    TEST --> REG[Saved Keras models and labels]
+\end{verbatim}
+
 \section{Suggested Tables}
 \noindent\textbullet\ Supported exercise list  
 \noindent\textbullet\ Model comparison table  
@@ -532,12 +1009,7 @@ Include the following in the appendix:
 
 \section*{Accuracy and Metrics Section Guidance}
 
-Insert your actual results from:
-
-```bash
-python training/train_lstm.py
-python training/evaluate.py --model models/exercise_bilstm.keras
-```
+Insert your actual results from \texttt{python training/train\_lstm.py} and \texttt{python training/evaluate.py --model models/exercise\_bilstm.keras}.
 
 Metrics to include:
 

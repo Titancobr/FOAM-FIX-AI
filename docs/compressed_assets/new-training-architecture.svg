@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+<style>.title{font:700 30px Arial;fill:#10233f}.h{font:700 21px Arial;fill:#10233f}.t{font:17px Arial;fill:#17202b}.box{stroke:#2b4c73;stroke-width:3;rx:18}.a{fill:#d9efff}.b{fill:#dff5e5}.c{fill:#fff0c7}.d{fill:#e7e0fa}.arrow{stroke:#40566f;stroke-width:4;fill:none;marker-end:url(#a)}</style>
+<defs><marker id="a" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#40566f"/></marker></defs>
+<rect width="1400" height="760" fill="#fff"/><text x="700" y="45" text-anchor="middle" class="title">FormFix AI — Upgraded Training Architecture</text>
+<rect x="40" y="130" width="230" height="120" class="box a"/><text x="155" y="170" text-anchor="middle" class="h">Raw videos</text><text x="155" y="205" text-anchor="middle" class="t">dataset/raw_videos/label</text>
+<rect x="340" y="130" width="230" height="120" class="box b"/><text x="455" y="170" text-anchor="middle" class="h">MediaPipe</text><text x="455" y="205" text-anchor="middle" class="t">Pose landmarks</text>
+<rect x="640" y="130" width="250" height="120" class="box b"/><text x="765" y="170" text-anchor="middle" class="h">Preprocess</text><text x="765" y="205" text-anchor="middle" class="t">hip-centre + torso scale</text>
+<rect x="960" y="130" width="250" height="120" class="box b"/><text x="1085" y="170" text-anchor="middle" class="h">Sequence dataset</text><text x="1085" y="205" text-anchor="middle" class="t">30 frames × 132 features</text>
+<path d="M270 190 H340" class="arrow"/><path d="M570 190 H640" class="arrow"/><path d="M890 190 H960" class="arrow"/>
+<rect x="170" y="390" width="260" height="130" class="box c"/><text x="300" y="430" text-anchor="middle" class="h">LSTM baseline</text><text x="300" y="468" text-anchor="middle" class="t">Adam + label smoothing</text><text x="300" y="494" text-anchor="middle" class="t">checkpointed Keras model</text>
+<rect x="570" y="390" width="260" height="130" class="box c"/><text x="700" y="430" text-anchor="middle" class="h">BiLSTM primary</text><text x="700" y="468" text-anchor="middle" class="t">class weights + early stop</text><text x="700" y="494" text-anchor="middle" class="t">exercise_bilstm.keras</text>
+<rect x="970" y="390" width="260" height="130" class="box c"/><text x="1100" y="430" text-anchor="middle" class="h">Transformer</text><text x="1100" y="468" text-anchor="middle" class="t">attention + positional encoding</text><text x="1100" y="494" text-anchor="middle" class="t">posture_transformer.keras</text>
+<path d="M1085 250 C1085 310 300 300 300 390" class="arrow"/><path d="M1085 250 V390" class="arrow"/><path d="M1085 250 C1085 310 1100 300 1100 390" class="arrow"/>
+<rect x="450" y="610" width="500" height="90" class="box d"/><text x="700" y="646" text-anchor="middle" class="h">Evaluation and registry</text><text x="700" y="678" text-anchor="middle" class="t">Top-1/top-3 · precision · recall · F1 · confusion matrix</text>
+<path d="M300 520 C300 575 500 560 570 610" class="arrow"/><path d="M700 520 V610" class="arrow"/><path d="M1100 520 C1100 575 900 560 830 610" class="arrow"/>
+</svg>
